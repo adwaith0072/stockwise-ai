@@ -16,7 +16,8 @@ import {
   Plus,
   MessageSquare,
   Settings,
-  LogOut
+  LogOut,
+  CheckCircle
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
@@ -587,19 +588,25 @@ export default function Dashboard() {
                       AI Advice
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {formattedAdviceLines.length > 1 ? (
-                        <ul className="list-disc pl-5 space-y-1">
-                          {formattedAdviceLines.map((line, idx) => (
-                            <li key={idx} className="leading-relaxed">
-                              {line}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="leading-relaxed">
-                          {formattedAdviceLines[0] || "No advice available yet."}
-                        </p>
-                      )}
+                      {
+                        formattedAdviceLines.length > 1 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {formattedAdviceLines.map((line, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded-full border bg-background"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5 text-primary" />
+                                <span className="leading-relaxed">{line}</span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="leading-relaxed text-foreground font-medium">
+                            {formattedAdviceLines[0] || "No advice available yet."}
+                          </p>
+                        )
+                      }
                     </div>
                     <p className="text-[11px] text-muted-foreground/80">
                       Tip: Use the action buttons below to view detailed lists and act.
