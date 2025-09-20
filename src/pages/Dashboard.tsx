@@ -1640,12 +1640,118 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* Save Settings */}
-            <div className="flex justify-end mb-10">
-              <Button onClick={handleSaveSettings} className="h-11">
-                Save Changes
-              </Button>
-            </div>
+            {/* Upgrade Plan */}
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <CardTitle>Upgrade Plan</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Free Tier */}
+                  <div className="border rounded-sm p-5 bg-secondary/20">
+                    <div className="mb-2 text-sm font-medium text-muted-foreground">Free Tier • Starter</div>
+                    <div className="text-2xl font-semibold mb-1">For small shopkeepers</div>
+                    <div className="text-sm text-muted-foreground mb-4">Always free</div>
+                    <ul className="space-y-2 text-sm">
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Upload stock & sales via Excel/CSV
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Smart Dashboard (basic stock view)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Low-stock alerts (top 5 items)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Simple Billing (basic bill generation)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Single shop support
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Language: English only
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        Monthly data limit: 500 records
+                      </li>
+                    </ul>
+                    <div className="mt-5">
+                      <Button
+                        variant="outline"
+                        onClick={() => toast("You're on the Free plan")}
+                      >
+                        Stay on Free
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Pro Tier */}
+                  <div className="border rounded-sm p-5 bg-background">
+                    <div className="mb-2 text-sm font-medium text-muted-foreground">Premium Tier • Pro</div>
+                    <div className="text-2xl font-semibold mb-1">For serious retailers</div>
+                    <div className="text-sm text-muted-foreground mb-4">Everything in Free, plus:</div>
+                    <ul className="space-y-2 text-sm">
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Full AI Assistant (natural language queries)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Multilingual: English, Hindi, Malayalam
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Advanced Alerts: overstock/dead-stock, expiry reminders
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Festival/seasonal demand prediction
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Market Trends Insights (AI-based recommendations)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Multi-store Sync (manage multiple shops)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Supplier Integration (generate purchase orders)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Unlimited data storage (no record cap)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
+                        Priority notifications (real-time stockout warnings)
+                      </li>
+                    </ul>
+                    <div className="mt-5 flex gap-3">
+                      <Button
+                        onClick={() => toast("Upgrade flow coming soon")}
+                      >
+                        Upgrade to Pro
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => toast("Contact support for custom needs")}
+                      >
+                        Talk to Sales
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* 5. Data Management */}
             <Card>
