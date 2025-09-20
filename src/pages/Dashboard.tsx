@@ -537,12 +537,32 @@ export default function Dashboard() {
                   )}
                 </div>
                 {alertAdvice && (
-                  <Textarea
-                    readOnly
-                    value={alertAdvice}
-                    className="min-h-[140px] text-sm"
-                    placeholder="AI advice will appear here"
-                  />
+                  <div className="rounded-sm border bg-secondary/30 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <MessageSquare className="w-4 h-4" />
+                      AI Advice
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {alertAdvice.split("\n").filter((l) => l.trim().length > 0).length > 1 ? (
+                        <ul className="list-disc pl-5 space-y-1">
+                          {alertAdvice
+                            .split("\n")
+                            .map((l) => l.trim())
+                            .filter(Boolean)
+                            .map((line, idx) => (
+                              <li key={idx} className="leading-relaxed">
+                                {line.replace(/^[-•]\s*/, "")}
+                              </li>
+                            ))}
+                        </ul>
+                      ) : (
+                        <p className="leading-relaxed">{alertAdvice}</p>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground/80">
+                      Tip: Use the action buttons below to view detailed lists and act.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
