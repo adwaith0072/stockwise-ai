@@ -115,3 +115,21 @@ export const getBill = query({
     return bill;
   },
 });
+
+// Add: Get all sales for current user (for backups/exports)
+export const getSales = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      // Return empty for unauthenticated to avoid client crash
+      return [];
+    }
+
+    return await ctx.db
+      .query("sales")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .collect();
+  },
+});

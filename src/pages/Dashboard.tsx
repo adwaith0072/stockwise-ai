@@ -26,6 +26,7 @@ import { useLocation } from "react-router";
 import * as XLSX from "xlsx";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
@@ -50,6 +51,9 @@ export default function Dashboard() {
   const expiringItems = useQuery(api.stock.getExpiringItems);
   const recentBills = useQuery(api.bills.getBills);
   const createBill = useMutation(api.bills.createBill);
+  const sales = useQuery(api.bills.getSales);
+  const updateSettings = useMutation(api.users.updateSettings);
+  const clearData = useMutation(api.users.clearData);
 
   const addStock = useMutation(api.stock.addStock);
   const chatWithAI = useAction(api.aiActions.chatWithAI);
@@ -420,6 +424,147 @@ export default function Dashboard() {
     } catch (err) {
       console.error(err);
       toast.error("Failed to process the uploaded file.");
+    }
+  };
+
+  // Settings local state seeded from user
+  const [settingsShopName, setSettingsShopName] = useState(user?.shopName || "");
+  const [settingsOwnerName, setSettingsOwnerName] = useState(user?.ownerName || "");
+  const [settingsContactNumber, setSettingsContactNumber] = useState(user?.contactNumber || "");
+  const [settingsShopType, setSettingsShopType] = useState(user?.shopType || "general");
+  const [settingsLanguage, setSettingsLanguage] = useState(user?.language || "en");
+  const [settingsDefaultUnits, setSettingsDefaultUnits] = useState(user?.defaultUnits || "");
+  const [settingsAiEnableSeasonal, setSettingsAiEnableSeasonal] = useState<boolean>(!!user?.aiEnableSeasonal);
+  const [settingsAiEnableDeadStock, setSettingsAiEnableDeadStock] = useState<boolean>(!!user?.aiEnableDeadStock);
+  const [settingsAiAlertFrequency, setSettingsAiAlertFrequency] = useState(user?.aiAlertFrequency || "weekly");
+  const [settingsNotifyLowStock, setSettingsNotifyLowStock] = useState<boolean>(user?.notifyLowStock ?? true);
+  const [settingsNotifyExpiry, setSettingsNotifyExpiry] = useState<boolean>(user?.notifyExpiry ?? true);
+  const [settingsNotifySeasonal, setSettingsNotifySeasonal] = useState<boolean>(user?.notifySeasonal ?? false);
+
+  // Keep settings in sync when user changes
+  useEffect(() => {
+    if (!user) return;
+    setSettingsShopName(user.shopName || "");
+    setSettingsOwnerName(user.ownerName || "");
+    setSettingsContactNumber(user.contactNumber || "");
+    setSettingsShopType(user.shopType || "general");
+    setSettingsLanguage(user.language || "en");
+    setSettingsDefaultUnits(user.defaultUnits || "");
+    setSettingsAiEnableSeasonal(!!user.aiEnableSeasonal);
+    setSettingsAiEnableDeadStock(!!user.aiEnableDeadStock);
+    setSettingsAiAlertFrequency(user.aiAlertFrequency || "weekly");
+    setSettingsNotifyLowStock(user.notifyLowStock ?? true);
+    setSettingsNotifyExpiry(user.notifyExpiry ?? true);
+    setSettingsNotifySeasonal(user.notifySeasonal ?? false);
+  }, [user?._id]);
+
+  const handleSaveSettings = async () => {
+    try {
+      await updateSettings({
+        shopType: settingsShopType as any,
+        shopName: settingsShopName || undefined,
+        ownerName: settingsOwnerName || undefined,
+        contactNumber: settingsContactNumber || undefined,
+        language: settingsLanguage || undefined,
+        defaultUnits: settingsDefaultUnits || undefined,
+        aiEnableSeasonal: settingsAiEnableSeasonal,
+        aiEnableDeadStock: settingsAiEnableDeadStock,
+        aiAlertFrequency: settingsAiAlertFrequency,
+        notifyLowStock: settingsNotifyLowStock,
+        notifyExpiry: settingsNotifyExpiry,
+        notifySeasonal: settingsNotifySeasonal,
+      });
+      toast.success("Settings saved");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save settings");
+    }
+  };
+
+  // Helpers for CSV export
+  const toCsv = (rows: Array<Record<string, any>>) => {
+    if (!rows || rows.length === 0) return "";
+    const headerSet = rows.reduce((acc: Set<string>, r) => {
+      Object.keys(r).forEach((k) => acc.add(k));
+      return acc;
+    }, new Set<string>());
+    const headers = Array.from(headerSet);
+    const escape = (v: any) => {
+      const s = v === null || v === undefined ? "" : String(v);
+      if (s.includes(",") || s.includes("\n") || s.includes("\"")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const lines = [
+      headers.join(","),
+      ...rows.map((r) => headers.map((h) => escape(r[h])).join(",")),
+    ];
+    return lines.join("\n");
+  };
+
+  const downloadText = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadBackup = () => {
+    try {
+      const stockRows = (stock || []).map((s) => ({
+        id: s._id,
+        itemName: s.itemName,
+        category: s.category || "",
+        unit: s.unit || "",
+        supplier: s.supplier || "",
+        currentQuantity: s.currentQuantity,
+        pricePerUnit: s.pricePerUnit,
+        expiryDate: s.expiryDate ? new Date(s.expiryDate).toISOString().slice(0, 10) : "",
+        minStockLevel: s.minStockLevel ?? "",
+      }));
+      const billsRows = (recentBills || []).map((b) => ({
+        id: b._id,
+        customerName: b.customerName || "",
+        itemsCount: b.items.length,
+        totalAmount: b.totalAmount,
+        paymentMethod: b.paymentMethod || "",
+        createdAt: new Date(b._creationTime).toISOString(),
+      }));
+      const salesRows = (sales || []).map((s) => ({
+        id: s._id,
+        stockId: s.stockId,
+        itemName: s.itemName,
+        quantitySold: s.quantitySold,
+        pricePerUnit: s.pricePerUnit,
+        totalAmount: s.totalAmount,
+        billId: s.billId || "",
+        createdAt: new Date(s._creationTime).toISOString(),
+      }));
+
+      downloadText("stock.csv", toCsv(stockRows));
+      downloadText("bills.csv", toCsv(billsRows));
+      downloadText("sales.csv", toCsv(salesRows));
+      toast.success("Backup downloaded");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to download backup");
+    }
+  };
+
+  const handleClearData = async () => {
+    if (!confirm("This will permanently delete all your stock, sales, and bills. Continue?")) return;
+    try {
+      await clearData({});
+      toast.success("All data cleared");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to clear data");
     }
   };
 
@@ -1328,6 +1473,202 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+          </motion.div>
+        )}
+
+        {activeTab === "settings" && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.4 }}
+          >
+            <div className="mb-8">
+              <h1 className="mb-2">Settings</h1>
+              <p className="text-muted-foreground">
+                Configure your account, inventory, AI assistant, notifications, and data.
+              </p>
+            </div>
+
+            {/* 1. Account Settings */}
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <CardTitle>Account Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>Shop Name</Label>
+                  <Input
+                    value={settingsShopName}
+                    onChange={(e) => setSettingsShopName(e.target.value)}
+                    placeholder="Enter shop name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Owner Name</Label>
+                  <Input
+                    value={settingsOwnerName}
+                    onChange={(e) => setSettingsOwnerName(e.target.value)}
+                    placeholder="Enter owner name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Contact Number</Label>
+                  <Input
+                    value={settingsContactNumber}
+                    onChange={(e) => setSettingsContactNumber(e.target.value)}
+                    placeholder="e.g., +91-XXXXXXXXXX"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Shop Type</Label>
+                  <select
+                    className="h-10 rounded-sm border bg-background px-3"
+                    value={settingsShopType}
+                    onChange={(e) => setSettingsShopType(e.target.value as "grocery" | "pharmacy" | "stationery" | "supermarket" | "general")}
+                  >
+                    <option value="grocery">Grocery</option>
+                    <option value="pharmacy">Pharmacy</option>
+                    <option value="stationery">Stationery</option>
+                    <option value="supermarket">Supermarket</option>
+                    <option value="general">General</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Preferred Language</Label>
+                  <select
+                    className="h-10 rounded-sm border bg-background px-3"
+                    value={settingsLanguage}
+                    onChange={(e) => setSettingsLanguage(e.target.value)}
+                  >
+                    <option value="en">English</option>
+                    <option value="hi">Hindi</option>
+                    <option value="ml">Malayalam</option>
+                  </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 2. Inventory & Billing Settings */}
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <CardTitle>Inventory & Billing Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>Default Units</Label>
+                  <select
+                    className="h-10 rounded-sm border bg-background px-3"
+                    value={settingsDefaultUnits}
+                    onChange={(e) => setSettingsDefaultUnits(e.target.value)}
+                  >
+                    <option value="">Select unit</option>
+                    <option value="kg">kg</option>
+                    <option value="litre">litre</option>
+                    <option value="piece">piece</option>
+                    <option value="strip">strip</option>
+                    <option value="pack">pack</option>
+                  </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 3. AI Assistant Settings */}
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <CardTitle>AI Assistant Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="font-medium">Enable seasonal/festival suggestions</div>
+                    <div className="text-sm text-muted-foreground">
+                      Include seasonal demand prompts in AI advice.
+                    </div>
+                  </div>
+                  <Switch checked={settingsAiEnableSeasonal} onCheckedChange={setSettingsAiEnableSeasonal} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="font-medium">Enable dead-stock alerts</div>
+                    <div className="text-sm text-muted-foreground">
+                      Highlight items with little to no sales movement.
+                    </div>
+                  </div>
+                  <Switch checked={settingsAiEnableDeadStock} onCheckedChange={setSettingsAiEnableDeadStock} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Alert frequency</Label>
+                  <select
+                    className="h-10 rounded-sm border bg-background px-3"
+                    value={settingsAiAlertFrequency}
+                    onChange={(e) => setSettingsAiAlertFrequency(e.target.value)}
+                  >
+                    <option value="real-time">Real-time</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 4. Notification Settings */}
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <CardTitle>Notification Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">Low-stock alerts</div>
+                  <Switch checked={settingsNotifyLowStock} onCheckedChange={setSettingsNotifyLowStock} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">Expiry alerts</div>
+                  <Switch checked={settingsNotifyExpiry} onCheckedChange={setSettingsNotifyExpiry} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">Seasonal demand alerts</div>
+                  <Switch checked={settingsNotifySeasonal} onCheckedChange={setSettingsNotifySeasonal} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Save Settings */}
+            <div className="flex justify-end mb-10">
+              <Button onClick={handleSaveSettings} className="h-11">
+                Save Changes
+              </Button>
+            </div>
+
+            {/* 5. Data Management */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle>Data Management</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Upload Data (Excel/CSV)</Label>
+                  <Input
+                    type="file"
+                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleFileUpload(f);
+                    }}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="outline" onClick={handleDownloadBackup}>
+                    Download Backup (CSV)
+                  </Button>
+                  <Button variant="destructive" onClick={handleClearData}>
+                    Clear Data
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Backup includes stock, bills, and sales. Clear Data removes all your stock, sales, and bills.
+                </p>
+              </CardContent>
+            </Card>
           </motion.div>
         )}
       </div>

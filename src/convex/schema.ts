@@ -53,6 +53,23 @@ const schema = defineSchema(
       shopType: v.optional(shopTypeValidator),
       shopName: v.optional(v.string()),
       language: v.optional(v.string()), // preferred language for AI assistant
+
+      // Settings: Account
+      ownerName: v.optional(v.string()),
+      contactNumber: v.optional(v.string()),
+
+      // Settings: Inventory & Billing
+      defaultUnits: v.optional(v.string()), // e.g., kg, litre, piece, strip, pack
+
+      // Settings: AI Assistant
+      aiEnableSeasonal: v.optional(v.boolean()),
+      aiEnableDeadStock: v.optional(v.boolean()),
+      aiAlertFrequency: v.optional(v.string()), // daily, weekly, real-time
+
+      // Settings: Notifications
+      notifyLowStock: v.optional(v.boolean()),
+      notifyExpiry: v.optional(v.boolean()),
+      notifySeasonal: v.optional(v.boolean()),
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
     // Stock/Inventory table
