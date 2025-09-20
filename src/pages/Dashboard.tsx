@@ -324,6 +324,14 @@ export default function Dashboard() {
               <span className="font-medium">{item.label}</span>
             </button>
           ))}
+          {/* New: Direct link to Stock page */}
+          <button
+            onClick={() => navigate("/stock")}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-sm text-left transition-colors hover:bg-secondary"
+          >
+            <Package className="w-5 h-5" />
+            <span className="font-medium">Stock</span>
+          </button>
         </div>
 
         <div className="border-t border-border pt-8">
