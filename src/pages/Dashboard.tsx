@@ -43,6 +43,8 @@ export default function Dashboard() {
   const [category, setCategory] = useState("");
   const [minStockLevel, setMinStockLevel] = useState<number | "">("");
   const [unit, setUnit] = useState("");
+  // Add supplier state
+  const [supplier, setSupplier] = useState("");
 
   // Add: AI chat state
   const [aiMessage, setAiMessage] = useState("");
@@ -65,6 +67,8 @@ export default function Dashboard() {
         category: category || undefined,
         minStockLevel: typeof minStockLevel === "number" ? minStockLevel : undefined,
         unit: unit || undefined,
+        // include supplier
+        supplier: supplier || undefined,
       });
       toast.success("Stock item added");
       setItemName("");
@@ -74,6 +78,8 @@ export default function Dashboard() {
       setCategory("");
       setMinStockLevel("");
       setUnit("");
+      // Reset supplier
+      setSupplier("");
     } catch (err) {
       console.error(err);
       toast.error("Failed to add stock");
@@ -147,6 +153,8 @@ export default function Dashboard() {
         const unitVal = pick(row, ["Unit"]);
         const priceVal = pick(row, ["Selling Price", "Price", "MRP", "Rate"]);
         const expiryVal = pick(row, ["Expiry Date", "Expiry", "Expiration"]);
+        // Add supplier pick
+        const supplierVal = pick(row, ["Supplier", "Vendor", "Manufacturer"]);
 
         const itemNameStr = String(itemNameVal || "").trim();
         const qtyNum = Number(qtyVal);
@@ -167,6 +175,8 @@ export default function Dashboard() {
             category: categoryVal ? String(categoryVal).trim() : undefined,
             minStockLevel: typeof minStockLevel === "number" ? minStockLevel : undefined,
             unit: unitVal ? String(unitVal).trim() : undefined,
+            // include supplier from file if present
+            supplier: supplierVal ? String(supplierVal).trim() : undefined,
           });
           success++;
         } catch {
@@ -405,6 +415,7 @@ export default function Dashboard() {
                     <li>Unit → kg, litre, piece, strip, bag, etc.</li>
                     <li>Selling Price → what the shop sells it for</li>
                     <li>Expiry Date → optional (any standard date format)</li>
+                    <li>Supplier → optional (e.g., vendor or manufacturer name)</li>
                   </ul>
                 </div>
                 <div>
@@ -477,6 +488,15 @@ export default function Dashboard() {
                       placeholder="e.g., kg, piece, strip"
                     />
                   </div>
+                  {/* Add Supplier field */}
+                  <div className="space-y-2">
+                    <Label>Supplier (optional)</Label>
+                    <Input
+                      value={supplier}
+                      onChange={(e) => setSupplier(e.target.value)}
+                      placeholder="e.g., ACME Distributors"
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label>Min Stock Level (optional)</Label>
                     <Input
@@ -507,6 +527,8 @@ export default function Dashboard() {
                         setCategory("");
                         setUnit("");
                         setMinStockLevel("");
+                        // Reset supplier on clear
+                        setSupplier("");
                       }}
                     >
                       Reset
@@ -526,6 +548,7 @@ export default function Dashboard() {
                             ₹{s.pricePerUnit} • {s.category || "Uncategorized"}
                             {s.unit ? ` • ${s.unit}` : ""}
                             {s.expiryDate ? ` • Expires ${new Date(s.expiryDate).toLocaleDateString()}` : ""}
+                            {s.supplier ? ` • Supplier ${s.supplier}` : ""}
                           </span>
                         </div>
                         <div className="text-sm text-muted-foreground">

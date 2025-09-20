@@ -28,6 +28,7 @@ export const addStock = mutation({
     category: v.optional(v.string()),
     minStockLevel: v.optional(v.number()),
     unit: v.optional(v.string()),
+    supplier: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
