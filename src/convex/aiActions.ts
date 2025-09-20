@@ -138,6 +138,9 @@ export const chatWithAI = action({
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            // Add recommended headers so OpenRouter accepts the request reliably
+            "HTTP-Referer": "https://stocksense.ai",
+            "X-Title": "StockSense AI",
           },
           body: JSON.stringify({
             model: "google/gemini-1.5-pro",
@@ -156,7 +159,20 @@ export const chatWithAI = action({
         }
 
         const data = await resp.json();
-        responseText = data?.choices?.[0]?.message?.content ?? "";
+        // Robustly extract content whether it's a string or array
+        const choice = data?.choices?.[0];
+        const msgContent = choice?.message?.content;
+        if (Array.isArray(msgContent)) {
+          responseText =
+            msgContent
+              .map((part: any) =>
+                typeof part === "string" ? part : part?.text ?? part?.content ?? "",
+              )
+              .join("\n")
+              .trim() || "";
+        } else {
+          responseText = (msgContent ?? "").trim();
+        }
       } catch (err) {
         console.error("OpenRouter call failed, attempting Gemini fallback:", err);
       }
