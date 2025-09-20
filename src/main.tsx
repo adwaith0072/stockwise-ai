@@ -14,6 +14,7 @@ import Setup from "./pages/Setup.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import LowStock from "@/pages/LowStock.tsx";
 import Expiring from "@/pages/Expiring.tsx";
+import Stock from "@/pages/Stock.tsx";
 import "./types/global.d.ts";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
@@ -55,6 +56,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/alerts/low-stock" element={<LowStock />} />
             <Route path="/alerts/expiring" element={<Expiring />} />
+            <Route path="/stock" element={<Stock />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

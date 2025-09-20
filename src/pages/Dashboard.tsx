@@ -19,7 +19,8 @@ import {
   LogOut
 } from "lucide-react";
 import { useNavigate } from "react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "react-router";
 import * as XLSX from "xlsx";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -27,6 +28,19 @@ export default function Dashboard() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
+  const location = useLocation(); // Add
+
+  // Open a specific tab if ?tab=... is present
+  // Allowed tabs: overview, inventory, billing, ai-chat, settings
+  // Run on search change
+  // This keeps defaults intact if no tab param is provided
+  // and prevents switching away if already on a valid tab.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    const allowed = new Set(["overview", "inventory", "billing", "ai-chat", "settings"]);
+    if (tab && allowed.has(tab)) setActiveTab(tab);
+  }, [location.search]);
 
   const stock = useQuery(api.stock.getStock);
   const lowStockAlerts = useQuery(api.stock.getLowStockAlerts);
