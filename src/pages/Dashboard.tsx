@@ -21,6 +21,7 @@ import {
 import { useNavigate } from "react-router";
 import { useState } from "react";
 import * as XLSX from "xlsx";
+import type { Id } from "@/convex/_generated/dataModel";
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const lowStockAlerts = useQuery(api.stock.getLowStockAlerts);
   const expiringItems = useQuery(api.stock.getExpiringItems);
   const recentBills = useQuery(api.bills.getBills);
+  const createBill = useMutation(api.bills.createBill);
 
   const addStock = useMutation(api.stock.addStock);
   const chatWithAI = useAction(api.aiActions.chatWithAI);
@@ -50,6 +52,71 @@ export default function Dashboard() {
   const [aiMessage, setAiMessage] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiHistory, setAiHistory] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
+
+  // Billing state
+  const [billingCustomerName, setBillingCustomerName] = useState("");
+  const [billingPaymentMethod, setBillingPaymentMethod] = useState("Cash");
+  const [billingSearch, setBillingSearch] = useState("");
+  const [billingCart, setBillingCart] = useState<
+    Array<{ stockId: Id<"stock">; itemName: string; pricePerUnit: number; quantity: number }>
+  >([]);
+
+  // Billing helpers
+  const addToCart = (s: any) => {
+    setBillingCart((prev) => {
+      const idx = prev.findIndex((i) => i.stockId === s._id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + 1 };
+        return copy;
+      }
+      return [
+        ...prev,
+        {
+          stockId: s._id as Id<"stock">,
+          itemName: s.itemName,
+          pricePerUnit: s.pricePerUnit,
+          quantity: 1,
+        },
+      ];
+    });
+  };
+
+  const updateQuantity = (stockId: Id<"stock">, qty: number) => {
+    setBillingCart((prev) =>
+      prev
+        .map((i) => (i.stockId === stockId ? { ...i, quantity: Math.max(1, qty) } : i))
+        .filter((i) => i.quantity > 0),
+    );
+  };
+
+  const removeFromCart = (stockId: Id<"stock">) => {
+    setBillingCart((prev) => prev.filter((i) => i.stockId !== stockId));
+  };
+
+  const cartTotal = billingCart.reduce((sum, i) => sum + i.quantity * i.pricePerUnit, 0);
+
+  const handleCreateBill = async () => {
+    if (billingCart.length === 0) {
+      toast.error("Add at least one item to the cart");
+      return;
+    }
+    try {
+      const billId = await createBill({
+        customerName: billingCustomerName || undefined,
+        items: billingCart.map((i) => ({ stockId: i.stockId, quantity: i.quantity })),
+        paymentMethod: billingPaymentMethod || undefined,
+      });
+      toast.success("Bill created");
+      setBillingCart([]);
+      setBillingCustomerName("");
+      setBillingPaymentMethod("Cash");
+      // Optionally navigate or show success; keeping on page
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to create bill");
+    }
+  };
 
   // Add: Inventory submit handler
   const handleAddStock = async (e: React.FormEvent) => {
@@ -614,6 +681,201 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
+          </motion.div>
+        )}
+
+        {activeTab === "billing" && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.4 }}
+          >
+            <div className="mb-8">
+              <h1 className="mb-2">Billing</h1>
+              <p className="text-muted-foreground">
+                Create a bill, add items to the cart, and check out. Stock will update automatically.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Stock Browser */}
+              <Card>
+                <CardContent className="p-8 space-y-4">
+                  <div className="space-y-2">
+                    <Label>Search Items</Label>
+                    <Input
+                      placeholder="Search by name or category"
+                      value={billingSearch}
+                      onChange={(e) => setBillingSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2 max-h-[420px] overflow-auto">
+                    {(stock || [])
+                      .filter((s) => {
+                        const q = billingSearch.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          s.itemName.toLowerCase().includes(q) ||
+                          (s.category || "").toLowerCase().includes(q)
+                        );
+                      })
+                      .map((s) => (
+                        <div
+                          key={s._id}
+                          className="flex items-center justify-between border rounded-sm p-4"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">{s.itemName}</span>
+                            <span className="text-sm text-muted-foreground">
+                              ₹{s.pricePerUnit}
+                              {s.unit ? ` • ${s.unit}` : ""} • Qty: {s.currentQuantity}
+                            </span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addToCart(s)}
+                            disabled={s.currentQuantity <= 0}
+                            className="shrink-0"
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      ))}
+                    {stock && stock.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No items available.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Cart & Checkout */}
+              <Card>
+                <CardContent className="p-8 space-y-6">
+                  {/* Customer & Payment */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Customer Name (optional)</Label>
+                      <Input
+                        value={billingCustomerName}
+                        onChange={(e) => setBillingCustomerName(e.target.value)}
+                        placeholder="Enter customer name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Payment Method</Label>
+                      <select
+                        className="h-10 rounded-sm border bg-background px-3"
+                        value={billingPaymentMethod}
+                        onChange={(e) => setBillingPaymentMethod(e.target.value)}
+                      >
+                        <option value="Cash">Cash</option>
+                        <option value="UPI">UPI</option>
+                        <option value="Card">Card</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Cart Items */}
+                  <div className="space-y-3">
+                    <h3 className="mb-2">Cart</h3>
+                    {billingCart.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No items in cart.</p>
+                    )}
+                    {billingCart.map((i) => (
+                      <div
+                        key={i.stockId}
+                        className="flex items-center justify-between border rounded-sm p-4"
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{i.itemName}</span>
+                          <span className="text-sm text-muted-foreground">₹{i.pricePerUnit}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => updateQuantity(i.stockId, i.quantity - 1)}
+                          >
+                            -
+                          </Button>
+                          <Input
+                            type="number"
+                            value={i.quantity}
+                            onChange={(e) =>
+                              updateQuantity(i.stockId, Number(e.target.value || 1))
+                            }
+                            min={1}
+                            className="w-16 h-10 text-center"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => updateQuantity(i.stockId, i.quantity + 1)}
+                          >
+                            +
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeFromCart(i.stockId)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Summary */}
+                  <div className="flex items-center justify-between border-t pt-4">
+                    <span className="font-medium">Total</span>
+                    <span className="text-xl font-light">₹{cartTotal.toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button onClick={handleCreateBill} disabled={billingCart.length === 0}>
+                      Create Bill
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setBillingCart([]);
+                        setBillingCustomerName("");
+                        setBillingPaymentMethod("Cash");
+                      }}
+                    >
+                      Reset
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Recent Bills */}
+            <div className="mt-10">
+              <h3 className="mb-4">Recent Bills</h3>
+              <div className="space-y-3">
+                {(recentBills || []).map((b) => (
+                  <div key={b._id} className="flex items-center justify-between border rounded-sm p-4">
+                    <div className="flex flex-col">
+                      <span className="font-medium">
+                        {b.customerName || "Walk-in Customer"}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {b.items.length} items • {b.paymentMethod || "—"}
+                      </span>
+                    </div>
+                    <div className="text-sm">
+                      ₹{b.totalAmount.toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+                {recentBills && recentBills.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No bills yet.</p>
+                )}
+              </div>
+            </div>
           </motion.div>
         )}
       </div>
