@@ -34,9 +34,60 @@ export const chatWithAI = action({
     const stock = await ctx.runQuery(api.stock.getStock);
     const lowStock = await ctx.runQuery(api.stock.getLowStockAlerts);
     const expiring = await ctx.runQuery(api.stock.getExpiringItems);
+    // Add: Pull recent bills to infer sales trends
+    const allBills = await ctx.runQuery(api.bills.getBills);
 
     const shopType = user.shopType || "general";
     const language = args.language || user.language || "english";
+
+    // Add: compute recent (30d) sales by item
+    const now = Date.now();
+    const windowMs = 30 * 24 * 60 * 60 * 1000;
+    const since = now - windowMs;
+    type SalesAgg = { qty: number; revenue: number };
+    const salesByItem: Record<string, SalesAgg> = {};
+    for (const b of allBills) {
+      // _creationTime exists on all documents
+      const created = (b as any)._creationTime as number | undefined;
+      if (created && created >= since) {
+        for (const it of b.items) {
+          const key = it.itemName;
+          if (!salesByItem[key]) salesByItem[key] = { qty: 0, revenue: 0 };
+          salesByItem[key].qty += it.quantity;
+          salesByItem[key].revenue += it.totalPrice;
+        }
+      }
+    }
+    const days = 30;
+    const topSellers = Object.entries(salesByItem)
+      .sort((a, b) => b[1].qty - a[1].qty)
+      .slice(0, 10)
+      .map(([name, agg]) => {
+        const avgDaily = agg.qty / days;
+        return `${name} (30d sold: ${agg.qty}, ~${avgDaily.toFixed(2)}/day)`;
+      });
+
+    // Add: derive reorder suggestions using sales velocity and current qty
+    const suggestions: Array<string> = [];
+    for (const s of stock) {
+      const soldAgg = salesByItem[s.itemName];
+      const avgDaily = soldAgg ? soldAgg.qty / days : 0;
+      const minLevel = s.minStockLevel ?? 10;
+      // target coverage: 14 days
+      const target = Math.ceil(avgDaily * 14);
+      const deficit = Math.max(0, target - s.currentQuantity);
+      const shouldSuggest =
+        (avgDaily > 0 && s.currentQuantity < avgDaily * 7) || s.currentQuantity <= minLevel;
+
+      if (shouldSuggest && deficit > 0) {
+        const unitStr = s.unit ? ` ${s.unit}` : "";
+        const noteParts: Array<string> = [];
+        if (avgDaily > 0) noteParts.push(`~${avgDaily.toFixed(2)}/day`);
+        if (s.currentQuantity <= minLevel) noteParts.push(`≤ min (${minLevel})`);
+        const note = noteParts.length ? ` — ${noteParts.join(", ")}` : "";
+        suggestions.push(`${s.itemName}: order ~${deficit}${unitStr}${note}`);
+      }
+    }
 
     // Prepare context summary to reduce tokens
     const contextSummary = [
@@ -44,6 +95,8 @@ export const chatWithAI = action({
       `Total Items: ${stock.length}`,
       `Low Stock: ${lowStock.length} (${lowStock.slice(0, 10).map(i => i.itemName).join(", ")})`,
       `Expiring in 30d: ${expiring.length} (${expiring.slice(0, 10).map(i => i.itemName).join(", ")})`,
+      topSellers.length ? `Top Sellers (30d): ${topSellers.join("; ")}` : `Top Sellers (30d): None`,
+      suggestions.length ? `Reorder Suggestions: ${suggestions.join("; ")}` : `Reorder Suggestions: None`,
       `Preferred Language: ${language}`,
     ].join("\n");
 
@@ -61,6 +114,7 @@ export const chatWithAI = action({
         const systemPreamble =
           "You are StockSense AI, an assistant for small Indian retailers. Provide concise, actionable inventory and billing insights. Use the provided context. Keep answers practical.";
 
+        // Add: guide Gemini specifically for "what stock should I increase" and trend analysis
         const prompt = [
           systemPreamble,
           "",
@@ -71,13 +125,13 @@ export const chatWithAI = action({
           args.message,
           "",
           "Instructions:",
-          "- If the user asks about low stock, list top items to reorder with brief reasoning.",
-          "- If about expiry, list expiring items and suggest actions (discounts, priority sale).",
-          "- If about sales/revenue, give high-level guidance and what to check next.",
+          "- Base recommendations on 30-day sales velocity and current stock.",
+          "- If asked 'what stock should I increase' or similar, list items with low stock vs sales and propose order quantities to cover ~14 days.",
+          "- Consider minStockLevel if provided.",
+          "- If expiring soon, avoid recommending large replenishments; mention caution.",
+          "- Present clear bullets: Item — Reason — Suggested Order.",
           "- Keep the tone simple and professional.",
-          language !== "english"
-            ? `- Respond in ${language}.`
-            : "- Respond in English.",
+          language !== "english" ? `- Respond in ${language}.` : "- Respond in English.",
         ].join("\n");
 
         const body = {
@@ -89,7 +143,7 @@ export const chatWithAI = action({
           ],
           generationConfig: {
             temperature: 0.4,
-            maxOutputTokens: 500,
+            maxOutputTokens: 700,
           },
         };
 
@@ -113,25 +167,33 @@ export const chatWithAI = action({
       }
     }
 
-    // Fallback mock logic (if no key or call failed)
+    // Fallback mock logic (if no key or call failed), improved with suggestions
     if (!responseText) {
       const msg = args.message.toLowerCase();
-      if (msg.includes("low stock") || msg.includes("reorder")) {
+      if (
+        msg.includes("what stock should i increase") ||
+        msg.includes("increase stock") ||
+        msg.includes("reorder") ||
+        msg.includes("low stock")
+      ) {
         responseText =
-          lowStock.length > 0
-            ? `You have ${lowStock.length} items running low: ${lowStock
-                .map((i) => i.itemName)
-                .join(", ")}. Consider restocking soon.`
-            : "All your stock levels look good! No immediate restocking needed.";
+          suggestions.length > 0
+            ? `Based on recent trends, consider increasing:\n- ${suggestions.join("\n- ")}`
+            : "No clear increase needed right now based on the last 30 days of sales and current stock.";
       } else if (msg.includes("expiry") || msg.includes("expire")) {
         responseText =
           expiring.length > 0
             ? `${expiring.length} items are expiring within 30 days: ${expiring
                 .map((i) => i.itemName)
-                .join(", ")}. Consider offering discounts.`
+                .join(", ")}. Consider discounts and priority sale.`
             : "No items are expiring soon. Your inventory is fresh!";
       } else if (msg.includes("sales") || msg.includes("revenue")) {
-        responseText = `Based on your ${shopType} shop type, focus on seasonal items. Check your dashboard for detailed analytics.`;
+        responseText =
+          topSellers.length > 0
+            ? `Top sellers in the last 30 days:\n- ${topSellers.join(
+                "\n- ",
+              )}\nFocus on stock availability for these items.`
+            : "No sales data found in the last 30 days.";
       } else {
         responseText = `As your AI assistant for your ${shopType} shop, I can help with inventory, sales insights, and restocking recommendations. What specific area would you like help with?`;
       }
