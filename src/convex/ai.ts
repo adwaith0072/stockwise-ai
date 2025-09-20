@@ -1,6 +1,5 @@
 import { v } from "convex/values";
-import { action, mutation } from "./_generated/server";
-import { api } from "./_generated/api";
+import { mutation } from "./_generated/server";
 
 export const saveChatHistory = mutation({
   args: {

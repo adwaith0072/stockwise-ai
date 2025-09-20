@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useState } from "react";
+import * as XLSX from "xlsx";
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const [expiryDate, setExpiryDate] = useState<string>("");
   const [category, setCategory] = useState("");
   const [minStockLevel, setMinStockLevel] = useState<number | "">("");
+  const [unit, setUnit] = useState("");
 
   // Add: AI chat state
   const [aiMessage, setAiMessage] = useState("");
@@ -62,6 +64,7 @@ export default function Dashboard() {
         expiryDate: expiryDate ? new Date(expiryDate).getTime() : undefined,
         category: category || undefined,
         minStockLevel: typeof minStockLevel === "number" ? minStockLevel : undefined,
+        unit: unit || undefined,
       });
       toast.success("Stock item added");
       setItemName("");
@@ -70,6 +73,7 @@ export default function Dashboard() {
       setExpiryDate("");
       setCategory("");
       setMinStockLevel("");
+      setUnit("");
     } catch (err) {
       console.error(err);
       toast.error("Failed to add stock");
@@ -91,6 +95,91 @@ export default function Dashboard() {
       toast.error("AI assistant failed to respond");
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  // Add helper: parse potential Excel serial date numbers or strings
+  const toTimestamp = (val: unknown): number | undefined => {
+    if (!val) return undefined;
+    if (typeof val === "number") {
+      // Excel serial date handling (approx)
+      const excelEpoch = Date.UTC(1899, 11, 30);
+      const ms = excelEpoch + val * 86400000;
+      return isNaN(ms) ? undefined : ms;
+    }
+    const d = new Date(String(val));
+    return isNaN(d.getTime()) ? undefined : d.getTime();
+  };
+
+  // Add file upload handler
+  const handleFileUpload = async (file: File) => {
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+
+      if (!rows.length) {
+        toast.error("No data found in the uploaded file.");
+        return;
+      }
+
+      // Helper for case-insensitive column matching
+      const pick = (obj: Record<string, any>, keys: string[]) => {
+        const map: Record<string, any> = {};
+        for (const k of Object.keys(obj)) map[k.trim().toLowerCase()] = obj[k];
+        for (const key of keys) {
+          const found = map[key.toLowerCase()];
+          if (found !== undefined) return found;
+        }
+        return undefined;
+      };
+
+      let success = 0;
+      let failed = 0;
+
+      toast("Uploading stock items...");
+
+      for (const row of rows) {
+        const itemNameVal = pick(row, ["Item Name", "Name", "Item"]);
+        const categoryVal = pick(row, ["Category"]);
+        const qtyVal = pick(row, ["Quantity in Stock", "Quantity", "Qty", "Stock"]);
+        const unitVal = pick(row, ["Unit"]);
+        const priceVal = pick(row, ["Selling Price", "Price", "MRP", "Rate"]);
+        const expiryVal = pick(row, ["Expiry Date", "Expiry", "Expiration"]);
+
+        const itemNameStr = String(itemNameVal || "").trim();
+        const qtyNum = Number(qtyVal);
+        const priceNum = Number(priceVal);
+        const expiryTs = toTimestamp(expiryVal);
+
+        if (!itemNameStr || isNaN(qtyNum) || isNaN(priceNum)) {
+          failed++;
+          continue;
+        }
+
+        try {
+          await addStock({
+            itemName: itemNameStr,
+            currentQuantity: qtyNum,
+            pricePerUnit: priceNum,
+            expiryDate: expiryTs,
+            category: categoryVal ? String(categoryVal).trim() : undefined,
+            minStockLevel: typeof minStockLevel === "number" ? minStockLevel : undefined,
+            unit: unitVal ? String(unitVal).trim() : undefined,
+          });
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+
+      if (success > 0) toast.success(`Uploaded ${success} items successfully.`);
+      if (failed > 0) toast.error(`${failed} rows could not be processed.`);
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to process the uploaded file.");
     }
   };
 
@@ -300,7 +389,37 @@ export default function Dashboard() {
                 Manage your stock levels and add new items.
               </p>
             </div>
-            
+
+            {/* Upload Instructions + File Input */}
+            <Card className="mb-6">
+              <CardContent className="p-8 space-y-4">
+                <div>
+                  <h3 className="mb-2">Upload CSV or Excel</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Your file should have the following columns:
+                  </p>
+                  <ul className="list-disc pl-6 text-sm text-muted-foreground space-y-1">
+                    <li>Item Name → name of the product (e.g., Rice, Paracetamol, Notebook)</li>
+                    <li>Category → Grocery, Pharmacy, Stationery, etc.</li>
+                    <li>Quantity in Stock → current stock level</li>
+                    <li>Unit → kg, litre, piece, strip, bag, etc.</li>
+                    <li>Selling Price → what the shop sells it for</li>
+                    <li>Expiry Date → optional (any standard date format)</li>
+                  </ul>
+                </div>
+                <div>
+                  <Input
+                    type="file"
+                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleFileUpload(f);
+                    }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardContent className="p-8">
                 <form onSubmit={handleAddStock} className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -351,6 +470,14 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label>Unit (optional)</Label>
+                    <Input
+                      value={unit}
+                      onChange={(e) => setUnit(e.target.value)}
+                      placeholder="e.g., kg, piece, strip"
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Label>Min Stock Level (optional)</Label>
                     <Input
                       type="number"
@@ -378,6 +505,7 @@ export default function Dashboard() {
                         setPricePerUnit(0);
                         setExpiryDate("");
                         setCategory("");
+                        setUnit("");
                         setMinStockLevel("");
                       }}
                     >
@@ -395,7 +523,9 @@ export default function Dashboard() {
                         <div className="flex flex-col">
                           <span className="font-medium">{s.itemName}</span>
                           <span className="text-sm text-muted-foreground">
-                            ₹{s.pricePerUnit} • {s.category || "Uncategorized"}{s.expiryDate ? ` • Expires ${new Date(s.expiryDate).toLocaleDateString()}` : ""}
+                            ₹{s.pricePerUnit} • {s.category || "Uncategorized"}
+                            {s.unit ? ` • ${s.unit}` : ""}
+                            {s.expiryDate ? ` • Expires ${new Date(s.expiryDate).toLocaleDateString()}` : ""}
                           </span>
                         </div>
                         <div className="text-sm text-muted-foreground">

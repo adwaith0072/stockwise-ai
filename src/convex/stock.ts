@@ -27,6 +27,7 @@ export const addStock = mutation({
     expiryDate: v.optional(v.number()),
     category: v.optional(v.string()),
     minStockLevel: v.optional(v.number()),
+    unit: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);

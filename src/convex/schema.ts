@@ -64,6 +64,7 @@ const schema = defineSchema(
       expiryDate: v.optional(v.number()), // timestamp for expiry
       category: v.optional(v.string()),
       minStockLevel: v.optional(v.number()), // for low stock alerts
+      unit: v.optional(v.string()),
     }).index("by_user", ["userId"])
       .index("by_user_and_item", ["userId", "itemName"]),
 
