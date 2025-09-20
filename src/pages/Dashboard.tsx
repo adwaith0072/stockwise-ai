@@ -603,7 +603,7 @@ export default function Dashboard() {
                               <ul className="divide-y">
                                 {suggestionLines.map((line, idx) => (
                                   <li key={idx} className="p-3 flex items-start gap-2">
-                                    <span className="text-muted-foreground">{"\u003e"}</span>
+                                    <span className="text-muted-foreground">{">\u003e"}</span>
                                     <span className="font-medium leading-relaxed">{line}</span>
                                   </li>
                                 ))}
@@ -624,7 +624,7 @@ export default function Dashboard() {
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                                 {seasonalLines.map((line, idx) => (
                                   <div key={idx} className="flex items-start gap-2 p-1">
-                                    <span className="text-muted-foreground">{"\u003e"}</span>
+                                    <span className="text-muted-foreground">{">\u003e"}</span>
                                     <span className="leading-relaxed">{line}</span>
                                   </div>
                                 ))}
@@ -634,9 +634,6 @@ export default function Dashboard() {
                         )}
                       </div>
                     </div>
-                    <p className="text-[11px] text-muted-foreground/80">
-                      Tip: Use the action buttons below to view detailed lists and act.
-                    </p>
                   </div>
                 )}
               </div>
