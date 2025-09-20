@@ -369,7 +369,7 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              <Card className={lowStockCount > 0 ? "border-destructive" : ""}>
+              <Card className={lowStockCount > 0 ? "border-destructive cursor-pointer" : "cursor-pointer"} onClick={() => navigate("/alerts/low-stock")}>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-muted-foreground flex items-center">
                     <AlertTriangle className="w-4 h-4 mr-2" />
@@ -381,7 +381,7 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              <Card className={expiringCount > 0 ? "border-destructive" : ""}>
+              <Card className={expiringCount > 0 ? "border-destructive cursor-pointer" : "cursor-pointer"} onClick={() => navigate("/alerts/expiring")}>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
                     Expiring Soon
@@ -392,36 +392,6 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
-
-            {/* Alerts */}
-            {(lowStockCount > 0 || expiringCount > 0) && (
-              <Card className="mb-8 border-destructive">
-                <CardHeader>
-                  <CardTitle className="flex items-center text-destructive">
-                    <AlertTriangle className="w-5 h-5 mr-2" />
-                    Attention Required
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {lowStockAlerts?.slice(0, 3).map((item) => (
-                    <div key={item._id} className="flex justify-between items-center">
-                      <span>{item.itemName}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {item.currentQuantity} left
-                      </span>
-                    </div>
-                  ))}
-                  {expiringItems?.slice(0, 3).map((item) => (
-                    <div key={item._id} className="flex justify-between items-center">
-                      <span>{item.itemName}</span>
-                      <span className="text-sm text-muted-foreground">
-                        Expires {new Date(item.expiryDate!).toLocaleDateString()}
-                      </span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
 
             {/* Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
