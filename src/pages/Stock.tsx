@@ -11,6 +11,17 @@ export default function Stock() {
   const navigate = useNavigate();
   const stock = useQuery(api.stock.getStock);
 
+  // Helper: format expiry with days remaining/ago
+  const formatExpiry = (ts?: number) => {
+    if (!ts) return "";
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const daysLeft = Math.ceil((ts - Date.now()) / msPerDay);
+    const dateStr = new Date(ts).toLocaleDateString();
+    const suffix =
+      daysLeft >= 0 ? `(${daysLeft} days left)` : `(${Math.abs(daysLeft)} days ago)`;
+    return ` • Expires ${dateStr} ${suffix}`;
+  };
+
   if (!user) {
     navigate("/auth");
     return null;
@@ -49,10 +60,9 @@ export default function Stock() {
                     <span className="text-sm text-muted-foreground">
                       ₹{s.pricePerUnit} • {s.category || "Uncategorized"}
                       {s.unit ? ` • ${s.unit}` : ""}
-                      {s.expiryDate
-                        ? ` • Expires ${new Date(s.expiryDate).toLocaleDateString()}`
-                        : ""}
+                      {formatExpiry(s.expiryDate)}
                       {s.supplier ? ` • Supplier ${s.supplier}` : ""}
+                      {s.currentQuantity === 0 ? " • Out of stock" : ""}
                     </span>
                   </div>
                   <div className="text-sm text-muted-foreground">
@@ -62,7 +72,7 @@ export default function Stock() {
               ))}
               {stock && stock.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No items yet. Click “Update Stock” to add your first item.
+                  No items yet. Click "Update Stock" to add your first item.
                 </p>
               )}
               {!stock && (
