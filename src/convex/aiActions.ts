@@ -89,6 +89,18 @@ export const chatWithAI = action({
       }
     }
 
+    // Add: compute slow movers and 30d revenue for broader trend insights
+    const slowMoversList = stock
+      .filter((s) => {
+        const agg = salesByItem[s.itemName];
+        const soldQty = agg?.qty ?? 0;
+        return soldQty === 0 && s.currentQuantity > 0;
+      })
+      .slice(0, 10)
+      .map((s) => `${s.itemName} (qty: ${s.currentQuantity}${s.unit ? " " + s.unit : ""})`);
+
+    const totalRevenue30d = Object.values(salesByItem).reduce((sum, a) => sum + a.revenue, 0);
+
     // Prepare context summary to reduce tokens
     const contextSummary = [
       `Shop Type: ${shopType}`,
@@ -97,6 +109,9 @@ export const chatWithAI = action({
       `Expiring in 30d: ${expiring.length} (${expiring.slice(0, 10).map(i => i.itemName).join(", ")})`,
       topSellers.length ? `Top Sellers (30d): ${topSellers.join("; ")}` : `Top Sellers (30d): None`,
       suggestions.length ? `Reorder Suggestions: ${suggestions.join("; ")}` : `Reorder Suggestions: None`,
+      // Add: include slow movers and revenue
+      slowMoversList.length ? `Slow Movers (no sales in 30d): ${slowMoversList.join("; ")}` : `Slow Movers: None`,
+      `Revenue (30d): ₹${totalRevenue30d.toLocaleString()}`,
       `Preferred Language: ${language}`,
     ].join("\n");
 
@@ -221,16 +236,58 @@ export const chatWithAI = action({
     // Fallback mock logic (if no key or call failed), improved with suggestions
     if (!responseText) {
       const msg = args.message.toLowerCase();
-      if (
+
+      // Broader intent detection
+      const mentionsIncrease =
         msg.includes("what stock should i increase") ||
         msg.includes("increase stock") ||
+        msg.includes("increase") ||
+        msg.includes("restock") ||
+        msg.includes("replenish") ||
         msg.includes("reorder") ||
-        msg.includes("low stock")
-      ) {
+        msg.includes("low stock");
+
+      const mentionsTrends =
+        msg.includes("trend") ||
+        msg.includes("trends") ||
+        msg.includes("bestseller") ||
+        msg.includes("best seller") ||
+        msg.includes("top seller") ||
+        msg.includes("top sellers") ||
+        msg.includes("what's selling") ||
+        msg.includes("whats selling") ||
+        msg.includes("popular");
+
+      const mentionsSales =
+        msg.includes("sales") || msg.includes("revenue") || msg.includes("performance");
+
+      if (mentionsIncrease) {
         responseText =
           suggestions.length > 0
-            ? `Based on recent trends, consider increasing:\n- ${suggestions.join("\n- ")}`
-            : "No clear increase needed right now based on the last 30 days of sales and current stock.";
+            ? `Based on recent sales velocity and current stock, consider increasing:\n- ${suggestions.join(
+                "\n- ",
+              )}\nTip: Aim for ~14 days of coverage; use ~avg/day × 14 to estimate order size.`
+            : lowStock.length > 0
+              ? `No sales-based reorder suggestions found, but these items are at or below minimum levels:\n- ${lowStock
+                  .slice(0, 10)
+                  .map((i) => `${i.itemName} — qty ${i.currentQuantity}${i.unit ? " " + i.unit : ""}`)
+                  .join("\n- ")}`
+              : "No items currently require restocking based on the last 30 days and current levels.";
+      } else if (mentionsTrends || mentionsSales) {
+        const top = topSellers.length
+          ? `Top sellers (30d):\n- ${topSellers.join("\n- ")}`
+          : "No top sellers identified in the last 30 days.";
+        const slow = slowMoversList.length
+          ? `\nSlow movers (no sales in 30d):\n- ${slowMoversList.join("\n- ")}`
+          : "";
+        const rev = `\nRevenue (last 30 days): ₹${totalRevenue30d.toLocaleString()}`;
+        const advice =
+          suggestions.length > 0
+            ? `\nAction: Prioritize availability for top sellers and consider:\n- ${suggestions
+                .slice(0, 5)
+                .join("\n- ")}`
+            : "";
+        responseText = `${top}${slow}${rev}${advice}`.trim();
       } else if (msg.includes("expiry") || msg.includes("expire")) {
         responseText =
           expiring.length > 0
@@ -238,15 +295,21 @@ export const chatWithAI = action({
                 .map((i) => i.itemName)
                 .join(", ")}. Consider discounts and priority sale.`
             : "No items are expiring soon. Your inventory is fresh!";
-      } else if (msg.includes("sales") || msg.includes("revenue")) {
-        responseText =
-          topSellers.length > 0
-            ? `Top sellers in the last 30 days:\n- ${topSellers.join(
-                "\n- ",
-              )}\nFocus on stock availability for these items.`
-            : "No sales data found in the last 30 days.";
       } else {
-        responseText = `As your AI assistant for your ${shopType} shop, I can help with inventory, sales insights, and restocking recommendations. What specific area would you like help with?`;
+        // General-purpose summary instead of a generic greeting
+        const quickSummary = [
+          topSellers.length
+            ? `Top sellers: ${topSellers.slice(0, 5).join("; ")}`
+            : "No top sellers in the last 30 days",
+          slowMoversList.length
+            ? `Slow movers to review: ${slowMoversList.slice(0, 5).join("; ")}`
+            : "No slow movers detected",
+          `Revenue (30d): ₹${totalRevenue30d.toLocaleString()}`,
+          suggestions.length
+            ? `Reorder suggestions: ${suggestions.slice(0, 5).join("; ")}`
+            : "No immediate restock suggestions",
+        ].join("\n");
+        responseText = `Here's a quick snapshot based on your recent data:\n${quickSummary}\n\nAsk me things like "what are the current trends", "what should I restock this week", or "which items are slow-moving?" for deeper insights.`;
       }
 
       if (language === "hindi") responseText = `[Hindi] ${responseText}`;
