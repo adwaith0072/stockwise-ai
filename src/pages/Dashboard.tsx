@@ -584,7 +584,6 @@ export default function Dashboard() {
     { id: "inventory", label: "Inventory", icon: Package },
     { id: "billing", label: "Billing", icon: TrendingUp },
     { id: "ai-chat", label: "AI Assistant", icon: MessageSquare },
-    { id: "settings", label: "Settings", icon: Settings },
   ];
 
   // Prepare simplified advice lines for display
@@ -643,6 +642,15 @@ export default function Dashboard() {
               {user.shopType || "General"} Store
             </p>
           </div>
+          <Button
+            variant={activeTab === "settings" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveTab("settings")}
+            className="w-full mb-2"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Settings
+          </Button>
           <Button 
             variant="outline" 
             size="sm" 
