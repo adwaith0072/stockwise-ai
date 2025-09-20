@@ -74,6 +74,35 @@ export const updateStockQuantity = mutation({
   },
 });
 
+export const updateStockDetails = mutation({
+  args: {
+    stockId: v.id("stock"),
+    itemName: v.optional(v.string()),
+    currentQuantity: v.optional(v.number()),
+    pricePerUnit: v.optional(v.number()),
+    expiryDate: v.optional(v.number()),
+    category: v.optional(v.string()),
+    minStockLevel: v.optional(v.number()),
+    unit: v.optional(v.string()),
+    supplier: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    const { stockId, ...patch } = args;
+    const stock = await ctx.db.get(stockId);
+    if (!stock || stock.userId !== user._id) {
+      throw new Error("Stock item not found");
+    }
+
+    await ctx.db.patch(stockId, patch);
+    return stockId;
+  },
+});
+
 // Get low stock alerts
 export const getLowStockAlerts = query({
   args: {},
