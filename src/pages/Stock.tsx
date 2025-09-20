@@ -28,14 +28,14 @@ export default function Stock() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-h-screen bg-background px-4 py-6 md:px-8 md:py-8">
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.4 }}
         className="max-w-5xl mx-auto space-y-6"
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3 md:items-center">
           <div>
             <h1 className="mb-2">Stock</h1>
             <p className="text-muted-foreground">
@@ -48,16 +48,16 @@ export default function Stock() {
         </div>
 
         <Card>
-          <CardContent className="p-6">
-            <div className="space-y-3">
+          <CardContent className="p-4 md:p-6">
+            <div className="space-y-2 md:space-y-3">
               {(stock || []).map((s) => (
                 <div
                   key={s._id}
-                  className="flex items-center justify-between border rounded-sm p-4"
+                  className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between border rounded-sm p-4"
                 >
                   <div className="flex flex-col">
                     <span className="font-medium">{s.itemName}</span>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm text-muted-foreground break-words">
                       ₹{s.pricePerUnit} • {s.category || "Uncategorized"}
                       {s.unit ? ` • ${s.unit}` : ""}
                       {formatExpiry(s.expiryDate)}
@@ -65,7 +65,7 @@ export default function Stock() {
                       {s.currentQuantity === 0 ? " • Out of stock" : ""}
                     </span>
                   </div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-muted-foreground md:text-right">
                     Qty: {s.currentQuantity}
                   </div>
                 </div>
