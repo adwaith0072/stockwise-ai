@@ -86,7 +86,8 @@ export const getBills = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) {
-      throw new Error("Not authenticated");
+      // Return empty list instead of throwing to avoid client crash before auth is ready
+      return [];
     }
 
     return await ctx.db

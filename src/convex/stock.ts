@@ -8,7 +8,8 @@ export const getStock = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) {
-      throw new Error("Not authenticated");
+      // Return empty list instead of throwing to avoid client crash before auth is ready
+      return [];
     }
 
     return await ctx.db
@@ -79,7 +80,7 @@ export const getLowStockAlerts = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) {
-      throw new Error("Not authenticated");
+      return [];
     }
 
     const allStock = await ctx.db
@@ -100,7 +101,7 @@ export const getExpiringItems = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) {
-      throw new Error("Not authenticated");
+      return [];
     }
 
     const allStock = await ctx.db
