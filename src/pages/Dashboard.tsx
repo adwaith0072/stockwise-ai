@@ -154,6 +154,32 @@ export default function Dashboard() {
   const [alertAdvice, setAlertAdvice] = useState<string>("");
   const [alertAdviceLoading, setAlertAdviceLoading] = useState(false);
 
+  // NEW: Minimized alert state persisted to localStorage
+  const [alertMinimized, setAlertMinimized] = useState<boolean>(false);
+
+  // Load minimized state from localStorage on mount
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("dash_alerts_minimized");
+      setAlertMinimized(v === "1");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Persist minimized state changes
+  useEffect(() => {
+    try {
+      if (alertMinimized) {
+        localStorage.setItem("dash_alerts_minimized", "1");
+      } else {
+        localStorage.removeItem("dash_alerts_minimized");
+      }
+    } catch {
+      // ignore
+    }
+  }, [alertMinimized]);
+
   // Clean and simplify AI advice for human-friendly display
   const simplifyAdvice = (text: string): string[] => {
     const lines = text
@@ -194,12 +220,16 @@ export default function Dashboard() {
     return lines;
   };
 
-  // Auto-open popup when there are alerts and not dismissed this session
+  // Auto-open popup when there are alerts and not dismissed/minimized this session
   useEffect(() => {
-    if (!alertDismissed && ((lowStockAlerts?.length || 0) > 0 || (expiringItems?.length || 0) > 0)) {
+    if (
+      !alertDismissed &&
+      !alertMinimized &&
+      ((lowStockAlerts?.length || 0) > 0 || (expiringItems?.length || 0) > 0)
+    ) {
       setAlertOpen(true);
     }
-  }, [lowStockAlerts?.length, expiringItems?.length, alertDismissed]);
+  }, [lowStockAlerts?.length, expiringItems?.length, alertDismissed, alertMinimized]);
 
   // Get AI advice for current alerts
   const handleGetAlertAdvice = async () => {
@@ -594,6 +624,10 @@ export default function Dashboard() {
   const suggestionLines = splitIdx === -1 ? formattedAdviceLines : formattedAdviceLines.slice(0, splitIdx);
   const seasonalLines = splitIdx === -1 ? [] : formattedAdviceLines.slice(splitIdx + 1);
 
+  // NEW: total alerts count for minimized badge
+  const alertCount =
+    (lowStockAlerts?.length || 0) + (expiringItems?.length || 0);
+
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
@@ -668,7 +702,11 @@ export default function Dashboard() {
         {/* Alert Popup */}
         <Dialog open={alertOpen} onOpenChange={(open) => {
           setAlertOpen(open);
-          if (!open) setAlertDismissed(true);
+          if (!open) {
+            // when dialog is closed, minimize it and prevent re-opening automatically
+            setAlertDismissed(true);
+            setAlertMinimized(true);
+          }
         }}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
@@ -807,6 +845,20 @@ export default function Dashboard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* NEW: Minimized Alerts button (only shows when minimized and alerts exist) */}
+        {alertMinimized && alertCount > 0 && (
+          <div className="fixed bottom-6 left-6 z-50">
+            <Button
+              variant="outline"
+              onClick={() => setAlertOpen(true)}
+              className="shadow-lg bg-background/80 supports-[backdrop-filter]:bg-background/50 backdrop-blur"
+            >
+              <AlertTriangle className="w-4 h-4 mr-2 text-destructive" />
+              Alerts ({alertCount})
+            </Button>
+          </div>
+        )}
 
         {activeTab === "overview" && (
           <motion.div
