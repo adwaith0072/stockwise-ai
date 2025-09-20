@@ -19,6 +19,147 @@ async function extractGeminiText(resp: Response) {
   return text as string;
 }
 
+// Add: Seasonal utilities for Indian retail
+function getIndianSeason(ts: number): "summer" | "monsoon" | "festive" | "winter" {
+  const m = new Date(ts).getMonth(); // 0-based
+  if (m >= 2 && m <= 4) return "summer";        // Mar-May
+  if (m >= 5 && m <= 8) return "monsoon";       // Jun-Sep
+  if (m === 9 || m === 10) return "festive";    // Oct-Nov
+  return "winter";                               // Dec-Feb
+}
+
+function seasonalRecommendations(shopType: string, season: "summer" | "monsoon" | "festive" | "winter"): Array<string> {
+  const s = shopType.toLowerCase();
+  const commonRetail = {
+    summer: [
+      "Umbrellas (early pre-monsoon demand)",
+      "Sunscreen, sunglasses, caps",
+      "Cooling powders, talc",
+      "Oral rehydration salts (ORS), glucose drinks",
+      "Cold beverages, ice-cream cones, kulfi sticks",
+    ],
+    monsoon: [
+      "Umbrellas, raincoats, waterproof covers",
+      "Doormats, floor wipes, quick-dry cloths",
+      "Insect repellents (mats, creams), mosquito coils",
+      "Dettol/Savlon, antiseptic creams, band-aids",
+      "Waterproof bags, shoe covers",
+    ],
+    festive: [
+      "Gift wraps, greeting cards, decorative lights",
+      "Dry fruits, sweets packaging",
+      "Puja items (diyas, incense), festival decor",
+      "Premium chocolates, gift hampers",
+    ],
+    winter: [
+      "Cold & cough medicines, vapor rubs",
+      "Room heaters (if applicable), hot water bags",
+      "Moisturizers, lip balms",
+      "Tea/coffee, soup packets",
+      "Thermos flasks, insulated bottles",
+    ],
+  };
+
+  const grocery = {
+    summer: [
+      "Electrolyte drinks, ORS",
+      "Curd/yogurt, buttermilk",
+      "Ice-cream cones, ice packs",
+      "Cooling drinks (sharbats, juices)",
+      "Fresh fruits with high water content (watermelon, muskmelon)",
+    ],
+    monsoon: [
+      "Tea, coffee, instant soups",
+      "Pakoda flours/snacks, chutneys",
+      "Spices/masalas for hot foods",
+      "Ginger, turmeric, immunity boosters",
+      "Mosquito repellents near checkout",
+    ],
+    festive: [
+      "Dry fruits, gift packs",
+      "Sweets ingredients (ghee, sugar, mawa substitutes)",
+      "Ready-to-eat snacks",
+      "Decor/gift wraps add-ons at counter",
+    ],
+    winter: [
+      "Soups, hot beverages",
+      "Jaggery, sesame (seasonal sweets)",
+      "Nuts and high-energy snacks",
+    ],
+  };
+
+  const pharmacy = {
+    summer: [
+      "Sunscreens, sunburn relief",
+      "ORS, rehydration powders",
+      "Antifungal powders/creams",
+      "Sunglasses, caps",
+    ],
+    monsoon: [
+      "Insect repellents, mosquito nets",
+      "Antiseptics, bandages",
+      "Cold/flu essentials (given weather swings)",
+      "Immunity supplements (Vitamin C/Zinc)",
+    ],
+    festive: [
+      "First-aid restock (more crowds/accidents)",
+      "Digestive aids, antacids",
+      "Giftable wellness kits",
+    ],
+    winter: [
+      "Cold/cough meds, steam inhalers",
+      "Vapor rubs, balms",
+      "Moisturizers, lip balms",
+      "Herbal immuno-boosters",
+    ],
+  };
+
+  const stationery = {
+    summer: [
+      "Exam prep supplies (if academic season)",
+      "Water bottles",
+      "Shading tools (art) that sell in vacations",
+    ],
+    monsoon: [
+      "Waterproof covers, plastic folders",
+      "Rain-proof school bag covers",
+    ],
+    festive: [
+      "Gift wraps, premium pens, greeting cards",
+      "Craft materials, decorative lights (small)",
+    ],
+    winter: [
+      "Exam stationary (if schedule fits)",
+      "Planners, calendars for new year",
+    ],
+  };
+
+  const supermarket = {
+    summer: [...commonRetail.summer, ...grocery.summer],
+    monsoon: [...commonRetail.monsoon, ...grocery.monsoon],
+    festive: [...commonRetail.festive, ...grocery.festive],
+    winter: [...commonRetail.winter, ...grocery.winter],
+  };
+
+  const general = {
+    summer: commonRetail.summer,
+    monsoon: commonRetail.monsoon,
+    festive: commonRetail.festive,
+    winter: commonRetail.winter,
+  };
+
+  const byShop: Record<string, Record<typeof season, Array<string>>> = {
+    grocery,
+    pharmacy,
+    stationery,
+    supermarket,
+    general,
+  };
+
+  const pack = byShop[s] ?? general;
+  return (pack[season] ?? []).slice(0, 10);
+}
+
 export const chatWithAI = action({
   args: {
     message: v.string(),
@@ -101,17 +242,22 @@ export const chatWithAI = action({
 
     const totalRevenue30d = Object.values(salesByItem).reduce((sum, a) => sum + a.revenue, 0);
 
+    // Add: Seasonal context
+    const season = getIndianSeason(now);
+    const seasonalRecs = seasonalRecommendations(shopType, season);
+
     // Prepare context summary to reduce tokens
     const contextSummary = [
       `Shop Type: ${shopType}`,
+      `Season: ${season}`,
       `Total Items: ${stock.length}`,
       `Low Stock: ${lowStock.length} (${lowStock.slice(0, 10).map(i => i.itemName).join(", ")})`,
       `Expiring in 30d: ${expiring.length} (${expiring.slice(0, 10).map(i => i.itemName).join(", ")})`,
       topSellers.length ? `Top Sellers (30d): ${topSellers.join("; ")}` : `Top Sellers (30d): None`,
       suggestions.length ? `Reorder Suggestions: ${suggestions.join("; ")}` : `Reorder Suggestions: None`,
-      // Add: include slow movers and revenue
       slowMoversList.length ? `Slow Movers (no sales in 30d): ${slowMoversList.join("; ")}` : `Slow Movers: None`,
       `Revenue (30d): ₹${totalRevenue30d.toLocaleString()}`,
+      seasonalRecs.length ? `Seasonal Suggestions: ${seasonalRecs.join("; ")}` : `Seasonal Suggestions: None`,
       `Preferred Language: ${language}`,
     ].join("\n");
 
@@ -141,6 +287,7 @@ export const chatWithAI = action({
       "- Consider minStockLevel if provided.",
       "- If expiring soon, avoid recommending large replenishments; mention caution.",
       "- Present clear bullets: Item — Reason — Suggested Order.",
+      "- Include a short 'Seasonal reminders' section tailored to the current season and shop type.",
       "- Keep the tone simple and professional.",
       language !== "english" ? `- Respond in ${language}.` : "- Respond in English.",
     ].join("\n");
@@ -261,18 +408,42 @@ export const chatWithAI = action({
       const mentionsSales =
         msg.includes("sales") || msg.includes("revenue") || msg.includes("performance");
 
-      if (mentionsIncrease) {
+      // Add: season intent detection
+      const mentionsSeason =
+        msg.includes("season") ||
+        msg.includes("monsoon") ||
+        msg.includes("summer") ||
+        msg.includes("winter") ||
+        msg.includes("festival") ||
+        msg.includes("festive") ||
+        msg.includes("rain") ||
+        msg.includes("umbrella") ||
+        msg.includes("seasonal") ||
+        msg.includes("reminder") ||
+        msg.includes("notifications");
+
+      const seasonalBlock =
+        seasonalRecs.length > 0
+          ? `\n\nSeasonal reminders (${season}, ${shopType}):\n- ${seasonalRecs.join("\n- ")}`
+          : "";
+
+      if (mentionsSeason) {
+        responseText =
+          seasonalRecs.length > 0
+            ? `Here are timely suggestions for the current ${season} season for your ${shopType} store:\n- ${seasonalRecs.join("\n- ")}\nTip: Place seasonal fast-movers near checkout for impulse buys.`
+            : `No specific seasonal reminders right now. Keep focusing on top sellers and low-stock items.`;
+      } else if (mentionsIncrease) {
         responseText =
           suggestions.length > 0
             ? `Based on recent sales velocity and current stock, consider increasing:\n- ${suggestions.join(
                 "\n- ",
-              )}\nTip: Aim for ~14 days of coverage; use ~avg/day × 14 to estimate order size.`
+              )}\nTip: Aim for ~14 days of coverage; use ~avg/day × 14 to estimate order size.${seasonalBlock}`
             : lowStock.length > 0
               ? `No sales-based reorder suggestions found, but these items are at or below minimum levels:\n- ${lowStock
                   .slice(0, 10)
                   .map((i) => `${i.itemName} — qty ${i.currentQuantity}${i.unit ? " " + i.unit : ""}`)
-                  .join("\n- ")}`
-              : "No items currently require restocking based on the last 30 days and current levels.";
+                  .join("\n- ")}${seasonalBlock}`
+              : `No items currently require restocking based on the last 30 days and current levels.${seasonalBlock}`;
       } else if (mentionsTrends || mentionsSales) {
         const top = topSellers.length
           ? `Top sellers (30d):\n- ${topSellers.join("\n- ")}`
@@ -287,16 +458,9 @@ export const chatWithAI = action({
                 .slice(0, 5)
                 .join("\n- ")}`
             : "";
-        responseText = `${top}${slow}${rev}${advice}`.trim();
-      } else if (msg.includes("expiry") || msg.includes("expire")) {
-        responseText =
-          expiring.length > 0
-            ? `${expiring.length} items are expiring within 30 days: ${expiring
-                .map((i) => i.itemName)
-                .join(", ")}. Consider discounts and priority sale.`
-            : "No items are expiring soon. Your inventory is fresh!";
+        responseText = `${top}${slow}${rev}${advice}${seasonalBlock}`.trim();
       } else {
-        // General-purpose summary instead of a generic greeting
+        // General-purpose summary including seasonal reminders
         const quickSummary = [
           topSellers.length
             ? `Top sellers: ${topSellers.slice(0, 5).join("; ")}`
@@ -309,7 +473,11 @@ export const chatWithAI = action({
             ? `Reorder suggestions: ${suggestions.slice(0, 5).join("; ")}`
             : "No immediate restock suggestions",
         ].join("\n");
-        responseText = `Here's a quick snapshot based on your recent data:\n${quickSummary}\n\nAsk me things like "what are the current trends", "what should I restock this week", or "which items are slow-moving?" for deeper insights.`;
+        const seasonalSummary =
+          seasonalRecs.length > 0
+            ? `\n\nSeasonal reminders (${season}, ${shopType}):\n- ${seasonalRecs.join("\n- ")}`
+            : "";
+        responseText = `Here's a quick snapshot based on your recent data:\n${quickSummary}${seasonalSummary}\n\nAsk me things like "what are the current trends", "what should I restock this week", "which items are slow-moving?", or "what seasonal items should I stock now?".`;
       }
 
       if (language === "hindi") responseText = `[Hindi] ${responseText}`;
