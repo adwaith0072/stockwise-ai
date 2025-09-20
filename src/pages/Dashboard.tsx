@@ -445,6 +445,11 @@ export default function Dashboard() {
   // Prepare simplified advice lines for display
   const formattedAdviceLines = alertAdvice ? simplifyAdvice(alertAdvice) : [];
 
+  // Add: split advice into actionable suggestions and seasonal reminders
+  const splitIdx = formattedAdviceLines.findIndex((l) => /^seasonal/i.test(l));
+  const suggestionLines = splitIdx === -1 ? formattedAdviceLines : formattedAdviceLines.slice(0, splitIdx);
+  const seasonalLines = splitIdx === -1 ? [] : formattedAdviceLines.slice(splitIdx + 1);
+
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
@@ -588,25 +593,46 @@ export default function Dashboard() {
                       AI Advice
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {
-                        formattedAdviceLines.length > 1 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {formattedAdviceLines.map((line, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-flex items-center gap-1 px-3 py-1 rounded-full border bg-background"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5 text-primary" />
-                                <span className="leading-relaxed">{line}</span>
-                              </span>
-                            ))}
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-[13px] font-medium mb-1">
+                            Based on recent sales velocity and current stock, consider:
                           </div>
-                        ) : (
-                          <p className="leading-relaxed text-foreground font-medium">
-                            {formattedAdviceLines[0] || "No advice available yet."}
+                          <div className="rounded-sm border bg-background">
+                            {suggestionLines.length > 0 ? (
+                              <ul className="divide-y">
+                                {suggestionLines.map((line, idx) => (
+                                  <li key={idx} className="p-3 flex items-start gap-2">
+                                    <span className="text-muted-foreground">{"\u003e"}</span>
+                                    <span className="font-medium leading-relaxed">{line}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="p-3 text-muted-foreground">No advice available yet.</div>
+                            )}
+                          </div>
+                          <p className="mt-2 text-[11px] text-muted-foreground/80">
+                            Tip: Aim for about 14 days of coverage; use about avg/day × 14 to estimate order size.
                           </p>
-                        )
-                      }
+                        </div>
+
+                        {seasonalLines.length > 0 && (
+                          <div>
+                            <div className="text-[13px] font-medium mb-1">Seasonal reminders:</div>
+                            <div className="rounded-sm border bg-background p-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                {seasonalLines.map((line, idx) => (
+                                  <div key={idx} className="flex items-start gap-2 p-1">
+                                    <span className="text-muted-foreground">{"\u003e"}</span>
+                                    <span className="leading-relaxed">{line}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <p className="text-[11px] text-muted-foreground/80">
                       Tip: Use the action buttons below to view detailed lists and act.
