@@ -100,39 +100,74 @@ export const chatWithAI = action({
       `Preferred Language: ${language}`,
     ].join("\n");
 
-    const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    const API_KEY = GOOGLE_API_KEY || GEMINI_API_KEY;
+    // Prefer OpenRouter if available; fall back to Gemini if configured
+    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY as string | undefined;
+    const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY as string | undefined;
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY as string | undefined;
 
     let responseText = "";
 
-    if (API_KEY) {
+    // Build a shared prompt once for both providers
+    const systemPreamble =
+      "You are StockSense AI, an assistant for small Indian retailers. Provide concise, actionable inventory and billing insights. Use the provided context. Keep answers practical.";
+
+    const prompt = [
+      systemPreamble,
+      "",
+      "Context:",
+      contextSummary,
+      "",
+      "User message:",
+      args.message,
+      "",
+      "Instructions:",
+      "- Base recommendations on 30-day sales velocity and current stock.",
+      "- If asked 'what stock should I increase' or similar, list items with low stock vs sales and propose order quantities to cover ~14 days.",
+      "- Consider minStockLevel if provided.",
+      "- If expiring soon, avoid recommending large replenishments; mention caution.",
+      "- Present clear bullets: Item — Reason — Suggested Order.",
+      "- Keep the tone simple and professional.",
+      language !== "english" ? `- Respond in ${language}.` : "- Respond in English.",
+    ].join("\n");
+
+    // Try OpenRouter first if configured
+    if (OPENROUTER_API_KEY) {
       try {
+        const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "google/gemini-1.5-pro",
+            messages: [
+              { role: "system", content: systemPreamble },
+              { role: "user", content: prompt },
+            ],
+            temperature: 0.4,
+            max_tokens: 700,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => "");
+          throw new Error(`OpenRouter error ${resp.status}: ${errText}`);
+        }
+
+        const data = await resp.json();
+        responseText = data?.choices?.[0]?.message?.content ?? "";
+      } catch (err) {
+        console.error("OpenRouter call failed, attempting Gemini fallback:", err);
+      }
+    }
+
+    // Fallback to direct Gemini API if OpenRouter not used or failed
+    if (!responseText && (GOOGLE_API_KEY || GEMINI_API_KEY)) {
+      try {
+        const API_KEY = GOOGLE_API_KEY || GEMINI_API_KEY;
         const endpoint =
           "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent";
-
-        const systemPreamble =
-          "You are StockSense AI, an assistant for small Indian retailers. Provide concise, actionable inventory and billing insights. Use the provided context. Keep answers practical.";
-
-        // Add: guide Gemini specifically for "what stock should I increase" and trend analysis
-        const prompt = [
-          systemPreamble,
-          "",
-          "Context:",
-          contextSummary,
-          "",
-          "User message:",
-          args.message,
-          "",
-          "Instructions:",
-          "- Base recommendations on 30-day sales velocity and current stock.",
-          "- If asked 'what stock should I increase' or similar, list items with low stock vs sales and propose order quantities to cover ~14 days.",
-          "- Consider minStockLevel if provided.",
-          "- If expiring soon, avoid recommending large replenishments; mention caution.",
-          "- Present clear bullets: Item — Reason — Suggested Order.",
-          "- Keep the tone simple and professional.",
-          language !== "english" ? `- Respond in ${language}.` : "- Respond in English.",
-        ].join("\n");
 
         const body = {
           contents: [
