@@ -21,11 +21,30 @@ async function extractGeminiText(resp: Response) {
 
 // Add: Seasonal utilities for Indian retail
 function getIndianSeason(ts: number): "summer" | "monsoon" | "festive" | "winter" {
-  const m = new Date(ts).getMonth(); // 0-based
-  if (m >= 2 && m <= 4) return "summer";        // Mar-May
-  if (m >= 5 && m <= 8) return "monsoon";       // Jun-Sep
-  if (m === 9 || m === 10) return "festive";    // Oct-Nov
-  return "winter";                               // Dec-Feb
+  // Use IST by shifting timestamp by +5.5 hours and reading UTC month
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const m = new Date(ts + IST_OFFSET_MS).getUTCMonth(); // 0-based month in IST
+  if (m >= 2 && m <= 4) return "summer";     // Mar-May
+  if (m >= 5 && m <= 8) return "monsoon";    // Jun-Sep
+  if (m === 9 || m === 10) return "festive"; // Oct-Nov (Diwali/seasonal festivals)
+  return "winter";                            // Dec-Feb
+}
+
+function detectSeasonFromText(text: string): ("summer" | "monsoon" | "festive" | "winter") | null {
+  const t = text.toLowerCase();
+  if (t.includes("monsoon") || t.includes("rain")) return "monsoon";
+  if (t.includes("summer") || t.includes("hot")) return "summer";
+  if (t.includes("winter") || t.includes("cold")) return "winter";
+  if (
+    t.includes("festive") ||
+    t.includes("festival") ||
+    t.includes("diwali") ||
+    t.includes("navratri") ||
+    t.includes("christmas")
+  ) {
+    return "festive";
+  }
+  return null;
 }
 
 function seasonalRecommendations(shopType: string, season: "summer" | "monsoon" | "festive" | "winter"): Array<string> {
@@ -242,14 +261,16 @@ export const chatWithAI = action({
 
     const totalRevenue30d = Object.values(salesByItem).reduce((sum, a) => sum + a.revenue, 0);
 
-    // Add: Seasonal context
-    const season = getIndianSeason(now);
+    // Determine season using IST and respect user intent if a season is mentioned
+    const currentSeason = getIndianSeason(now);
+    const seasonFromQuery = detectSeasonFromText(args.message);
+    const season = seasonFromQuery ?? currentSeason;
     const seasonalRecs = seasonalRecommendations(shopType, season);
 
     // Prepare context summary to reduce tokens
     const contextSummary = [
       `Shop Type: ${shopType}`,
-      `Season: ${season}`,
+      `Season: ${season}${seasonFromQuery ? " (detected from query)" : ""}`,
       `Total Items: ${stock.length}`,
       `Low Stock: ${lowStock.length} (${lowStock.slice(0, 10).map(i => i.itemName).join(", ")})`,
       `Expiring in 30d: ${expiring.length} (${expiring.slice(0, 10).map(i => i.itemName).join(", ")})`,
@@ -430,7 +451,9 @@ export const chatWithAI = action({
       if (mentionsSeason) {
         responseText =
           seasonalRecs.length > 0
-            ? `Here are timely suggestions for the current ${season} season for your ${shopType} store:\n- ${seasonalRecs.join("\n- ")}\nTip: Place seasonal fast-movers near checkout for impulse buys.`
+            ? `Here are timely suggestions for the ${season} season for your ${shopType} store:\n- ${seasonalRecs.join(
+                "\n- ",
+              )}\nNote: Season was ${seasonFromQuery ? "selected from your query" : "detected by date (IST)"}.\nTip: Place seasonal fast-movers near checkout for impulse buys.`
             : `No specific seasonal reminders right now. Keep focusing on top sellers and low-stock items.`;
       } else if (mentionsIncrease) {
         responseText =
