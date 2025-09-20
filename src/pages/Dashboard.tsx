@@ -149,6 +149,46 @@ export default function Dashboard() {
   const [alertAdvice, setAlertAdvice] = useState<string>("");
   const [alertAdviceLoading, setAlertAdviceLoading] = useState(false);
 
+  // Clean and simplify AI advice for human-friendly display
+  const simplifyAdvice = (text: string): string[] => {
+    const lines = text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => {
+        let s = l.replace(/^[-•]\s*/, ""); // remove bullet symbols
+
+        // remove metrics like "~0.80/day"
+        s = s.replace(/~\s*\d+(\.\d+)?\s*\/\s*day/gi, "");
+
+        // simplify "≤ min (10)" to "low stock"
+        s = s.replace(/≤\s*min\s*\(\s*\d+\s*\)/gi, "low stock");
+
+        // replace comparison symbols with words
+        s = s.replace(/≤/g, "at or below");
+        s = s.replace(/≥/g, "at or above");
+        s = s.replace(/~/g, "about ");
+
+        // remove any remaining parenthetical clutter
+        s = s.replace(/\((?:[^()]|\([^()]*\))*\)/g, "");
+
+        // collapse extra spaces and tidy punctuation
+        s = s.replace(/\s{2,}/g, " ").replace(/\s*[:\-–—]\s*$/g, "").trim();
+
+        // capitalize first letter
+        if (s.length > 0) s = s[0].toUpperCase() + s.slice(1);
+
+        // add gentle phrasing for common fragments
+        s = s.replace(/\breorder\b/i, "Reorder");
+        s = s.replace(/\bsell through\b/i, "Sell faster");
+
+        return s;
+      })
+      .filter(Boolean);
+
+    return lines;
+  };
+
   // Auto-open popup when there are alerts and not dismissed this session
   useEffect(() => {
     if (!alertDismissed && ((lowStockAlerts?.length || 0) > 0 || (expiringItems?.length || 0) > 0)) {
@@ -390,7 +430,8 @@ export default function Dashboard() {
   const totalItems = stock?.length || 0;
   const lowStockCount = lowStockAlerts?.length || 0;
   const expiringCount = expiringItems?.length || 0;
-  const totalValue = stock?.reduce((sum, item) => sum + (item.currentQuantity * item.pricePerUnit), 0) || 0;
+  const totalValue =
+    stock?.reduce((sum, item) => sum + item.currentQuantity * item.pricePerUnit, 0) || 0;
 
   const sidebarItems = [
     { id: "overview", label: "Overview", icon: BarChart3 },
@@ -399,6 +440,9 @@ export default function Dashboard() {
     { id: "ai-chat", label: "AI Assistant", icon: MessageSquare },
     { id: "settings", label: "Settings", icon: Settings },
   ];
+
+  // Prepare simplified advice lines for display
+  const formattedAdviceLines = alertAdvice ? simplifyAdvice(alertAdvice) : [];
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -543,20 +587,18 @@ export default function Dashboard() {
                       AI Advice
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {alertAdvice.split("\n").filter((l) => l.trim().length > 0).length > 1 ? (
+                      {formattedAdviceLines.length > 1 ? (
                         <ul className="list-disc pl-5 space-y-1">
-                          {alertAdvice
-                            .split("\n")
-                            .map((l) => l.trim())
-                            .filter(Boolean)
-                            .map((line, idx) => (
-                              <li key={idx} className="leading-relaxed">
-                                {line.replace(/^[-•]\s*/, "")}
-                              </li>
-                            ))}
+                          {formattedAdviceLines.map((line, idx) => (
+                            <li key={idx} className="leading-relaxed">
+                              {line}
+                            </li>
+                          ))}
                         </ul>
                       ) : (
-                        <p className="leading-relaxed">{alertAdvice}</p>
+                        <p className="leading-relaxed">
+                          {formattedAdviceLines[0] || "No advice available yet."}
+                        </p>
                       )}
                     </div>
                     <p className="text-[11px] text-muted-foreground/80">
