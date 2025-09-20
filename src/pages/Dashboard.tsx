@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
+import type React from "react";
 import { useLocation } from "react-router";
 import * as XLSX from "xlsx";
 import type { Id } from "@/convex/_generated/dataModel";
