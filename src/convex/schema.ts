@@ -16,6 +16,24 @@ export const roleValidator = v.union(
 );
 export type Role = Infer<typeof roleValidator>;
 
+// Shop types for StockSense AI
+export const SHOP_TYPES = {
+  GROCERY: "grocery",
+  PHARMACY: "pharmacy", 
+  STATIONERY: "stationery",
+  SUPERMARKET: "supermarket",
+  GENERAL: "general",
+} as const;
+
+export const shopTypeValidator = v.union(
+  v.literal(SHOP_TYPES.GROCERY),
+  v.literal(SHOP_TYPES.PHARMACY),
+  v.literal(SHOP_TYPES.STATIONERY),
+  v.literal(SHOP_TYPES.SUPERMARKET),
+  v.literal(SHOP_TYPES.GENERAL),
+);
+export type ShopType = Infer<typeof shopTypeValidator>;
+
 const schema = defineSchema(
   {
     // default auth tables using convex auth.
@@ -30,14 +48,60 @@ const schema = defineSchema(
       isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
 
       role: v.optional(roleValidator), // role of the user. do not remove
+      
+      // StockSense specific fields
+      shopType: v.optional(shopTypeValidator),
+      shopName: v.optional(v.string()),
+      language: v.optional(v.string()), // preferred language for AI assistant
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
-    // add other tables here
+    // Stock/Inventory table
+    stock: defineTable({
+      userId: v.id("users"),
+      itemName: v.string(),
+      currentQuantity: v.number(),
+      pricePerUnit: v.number(),
+      expiryDate: v.optional(v.number()), // timestamp for expiry
+      category: v.optional(v.string()),
+      minStockLevel: v.optional(v.number()), // for low stock alerts
+    }).index("by_user", ["userId"])
+      .index("by_user_and_item", ["userId", "itemName"]),
 
-    // tableName: defineTable({
-    //   ...
-    //   // table fields
-    // }).index("by_field", ["field"])
+    // Sales transactions
+    sales: defineTable({
+      userId: v.id("users"),
+      stockId: v.id("stock"),
+      itemName: v.string(),
+      quantitySold: v.number(),
+      pricePerUnit: v.number(),
+      totalAmount: v.number(),
+      billId: v.optional(v.id("bills")),
+    }).index("by_user", ["userId"])
+      .index("by_stock", ["stockId"])
+      .index("by_bill", ["billId"]),
+
+    // Bills/Invoices
+    bills: defineTable({
+      userId: v.id("users"),
+      customerName: v.optional(v.string()),
+      items: v.array(v.object({
+        stockId: v.id("stock"),
+        itemName: v.string(),
+        quantity: v.number(),
+        pricePerUnit: v.number(),
+        totalPrice: v.number(),
+      })),
+      totalAmount: v.number(),
+      paymentMethod: v.optional(v.string()),
+    }).index("by_user", ["userId"]),
+
+    // AI Chat history
+    chatHistory: defineTable({
+      userId: v.id("users"),
+      message: v.string(),
+      response: v.string(),
+      language: v.optional(v.string()),
+    }).index("by_user", ["userId"]),
   },
   {
     schemaValidation: false,

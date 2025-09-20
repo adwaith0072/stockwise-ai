@@ -1,5 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { query, QueryCtx } from "./_generated/server";
+import { query, QueryCtx, mutation } from "./_generated/server";
+import { v } from "convex/values";
+import { shopTypeValidator } from "./schema";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -31,3 +33,26 @@ export const getCurrentUser = async (ctx: QueryCtx) => {
   }
   return await ctx.db.get(userId);
 };
+
+// Update user profile with shop details
+export const updateProfile = mutation({
+  args: {
+    shopType: shopTypeValidator,
+    shopName: v.optional(v.string()),
+    language: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    await ctx.db.patch(user._id, {
+      shopType: args.shopType,
+      shopName: args.shopName,
+      language: args.language,
+    });
+
+    return user._id;
+  },
+});
