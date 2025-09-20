@@ -515,13 +515,34 @@ export default function Dashboard() {
               )}
 
               <div className="space-y-2">
-                <Button onClick={handleGetAlertAdvice} disabled={alertAdviceLoading} className="w-full">
-                  {alertAdviceLoading ? "Getting AI Advice..." : "Get AI Advice"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={handleGetAlertAdvice} disabled={alertAdviceLoading} className="w-full">
+                    {alertAdvice ? (alertAdviceLoading ? "Regenerating..." : "Regenerate Advice") : (alertAdviceLoading ? "Getting AI Advice..." : "Get AI Advice")}
+                  </Button>
+                  {alertAdvice && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(alertAdvice);
+                          toast.success("Advice copied to clipboard");
+                        } catch {
+                          toast.error("Failed to copy");
+                        }
+                      }}
+                    >
+                      Copy
+                    </Button>
+                  )}
+                </div>
                 {alertAdvice && (
-                  <div className="border rounded-sm p-3 text-sm whitespace-pre-wrap">
-                    {alertAdvice}
-                  </div>
+                  <Textarea
+                    readOnly
+                    value={alertAdvice}
+                    className="min-h-[140px] text-sm"
+                    placeholder="AI advice will appear here"
+                  />
                 )}
               </div>
             </div>
