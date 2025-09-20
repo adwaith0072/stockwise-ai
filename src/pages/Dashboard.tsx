@@ -24,6 +24,7 @@ import type React from "react";
 import { useLocation } from "react-router";
 import * as XLSX from "xlsx";
 import type { Id } from "@/convex/_generated/dataModel";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
@@ -139,6 +140,46 @@ export default function Dashboard() {
     } catch (e) {
       console.error(e);
       toast.error("Failed to update stock");
+    }
+  };
+
+  // Add: Alert popup state for low stock / expiring items
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertDismissed, setAlertDismissed] = useState(false);
+  const [alertAdvice, setAlertAdvice] = useState<string>("");
+  const [alertAdviceLoading, setAlertAdviceLoading] = useState(false);
+
+  // Auto-open popup when there are alerts and not dismissed this session
+  useEffect(() => {
+    if (!alertDismissed && ((lowStockAlerts?.length || 0) > 0 || (expiringItems?.length || 0) > 0)) {
+      setAlertOpen(true);
+    }
+  }, [lowStockAlerts?.length, expiringItems?.length, alertDismissed]);
+
+  // Get AI advice for current alerts
+  const handleGetAlertAdvice = async () => {
+    try {
+      setAlertAdviceLoading(true);
+      setAlertAdvice("");
+      const lowList = (lowStockAlerts || []).slice(0, 10).map(i => i.itemName).join(", ");
+      const expList = (expiringItems || []).slice(0, 10).map(i => i.itemName).join(", ");
+      const msgParts: Array<string> = [];
+      if (lowList) msgParts.push(`Low stock items: ${lowList}`);
+      if (expList) msgParts.push(`Expiring soon: ${expList}`);
+      const prompt = [
+        "Provide short, actionable steps for these alerts.",
+        "For low stock, suggest order quantities (~14 days coverage) and reasons.",
+        "For expiring items, suggest sell-through tactics and caution on reordering.",
+        msgParts.join(" | "),
+      ].join("\n");
+
+      const resp = await chatWithAI({ message: prompt, language: user?.language });
+      setAlertAdvice(resp);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to get AI advice");
+    } finally {
+      setAlertAdviceLoading(false);
     }
   };
 
@@ -421,6 +462,86 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <div className="flex-1 p-8">
+        {/* Alert Popup */}
+        <Dialog open={alertOpen} onOpenChange={(open) => {
+          setAlertOpen(open);
+          if (!open) setAlertDismissed(true);
+        }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-destructive" />
+                Attention needed
+              </DialogTitle>
+              <DialogDescription>
+                We noticed items that are low on stock and/or expiring soon.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {(lowStockAlerts?.length || 0) > 0 && (
+                <div className="border rounded-sm p-3">
+                  <div className="font-medium mb-2">Low Stock</div>
+                  <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                    {(lowStockAlerts || []).slice(0, 5).map((i) => (
+                      <li key={i._id}>{i.itemName} — qty {i.currentQuantity}{i.unit ? ` ${i.unit}` : ""}</li>
+                    ))}
+                  </ul>
+                  {(lowStockAlerts!.length > 5) && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      +{lowStockAlerts!.length - 5} more
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(expiringItems?.length || 0) > 0 && (
+                <div className="border rounded-sm p-3">
+                  <div className="font-medium mb-2">Expiring Soon</div>
+                  <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                    {(expiringItems || []).slice(0, 5).map((i) => (
+                      <li key={i._id}>
+                        {i.itemName}
+                        {i.expiryDate ? ` — expires ${new Date(i.expiryDate).toLocaleDateString()}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                  {(expiringItems!.length > 5) && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      +{expiringItems!.length - 5} more
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Button onClick={handleGetAlertAdvice} disabled={alertAdviceLoading} className="w-full">
+                  {alertAdviceLoading ? "Getting AI Advice..." : "Get AI Advice"}
+                </Button>
+                {alertAdvice && (
+                  <div className="border rounded-sm p-3 text-sm whitespace-pre-wrap">
+                    {alertAdvice}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter className="flex justify-between">
+              <Button variant="outline" onClick={() => { setAlertOpen(false); setAlertDismissed(true); }}>
+                Dismiss
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => navigate("/alerts/low-stock")} disabled={(lowStockAlerts?.length || 0) === 0}>
+                  View Low Stock
+                </Button>
+                <Button variant="outline" onClick={() => navigate("/alerts/expiring")} disabled={(expiringItems?.length || 0) === 0}>
+                  View Expiring
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {activeTab === "overview" && (
           <motion.div
             initial={{ y: 20, opacity: 0 }}
