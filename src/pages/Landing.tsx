@@ -122,6 +122,7 @@ export default function Landing() {
                 variant="outline" 
                 size="lg"
                 className="text-lg px-8 py-6"
+                onClick={() => window.open("https://drive.google.com/file/d/1tZ7qPnGABJGmv-czY-jjcJH8bKZM-BFb/view?usp=sharing", "_blank", "noopener,noreferrer")}
               >
                 Watch Demo
               </Button>
