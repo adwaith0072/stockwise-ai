@@ -1,54 +1,28 @@
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Toaster } from "@/components/ui/sonner";
-import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
-import { InstrumentationProvider } from "@/instrumentation.tsx";
 import AuthPage from "@/pages/Auth.tsx";
+import Dashboard from "@/pages/Dashboard.tsx";
+import Expiring from "@/pages/Expiring.tsx";
+import Landing from "@/pages/Landing.tsx";
+import LowStock from "@/pages/LowStock.tsx";
+import NotFound from "@/pages/NotFound.tsx";
+import Setup from "@/pages/Setup.tsx";
+import Stock from "@/pages/Stock.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
-import { StrictMode, useEffect } from "react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Route, Routes } from "react-router";
 import "./index.css";
-import Landing from "./pages/Landing.tsx";
-import Dashboard from "./pages/Dashboard.tsx";
-import Setup from "./pages/Setup.tsx";
-import NotFound from "./pages/NotFound.tsx";
-import LowStock from "@/pages/LowStock.tsx";
-import Expiring from "@/pages/Expiring.tsx";
-import Stock from "@/pages/Stock.tsx";
 import "./types/global.d.ts";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
-function RouteSyncer() {
-  const location = useLocation();
-  useEffect(() => {
-    window.parent.postMessage(
-      { type: "iframe-route-change", path: location.pathname },
-      "*",
-    );
-  }, [location.pathname]);
-
-  useEffect(() => {
-    function handleMessage(event: MessageEvent) {
-      if (event.data?.type === "navigate") {
-        if (event.data.direction === "back") window.history.back();
-        if (event.data.direction === "forward") window.history.forward();
-      }
-    }
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
-  return null;
-}
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <VlyToolbar />
-    <InstrumentationProvider>
+    <ErrorBoundary>
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
-          <RouteSyncer />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<AuthPage redirectAfterAuth="/setup" />} />
@@ -62,6 +36,6 @@ createRoot(document.getElementById("root")!).render(
         </BrowserRouter>
         <Toaster />
       </ConvexAuthProvider>
-    </InstrumentationProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

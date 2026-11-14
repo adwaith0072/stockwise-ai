@@ -5,8 +5,6 @@ import { Card } from "@/components/ui/card";
 import { 
   BarChart3, 
   Brain, 
-  ShoppingCart, 
-  TrendingUp, 
   AlertTriangle,
   Globe,
   ArrowRight,
@@ -68,7 +66,7 @@ export default function Landing() {
             <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center">
               <BarChart3 className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-medium tracking-tight">StockSense AI</span>
+            <span className="text-xl font-medium tracking-tight">StockWise AI</span>
           </motion.div>
           
           <motion.div
@@ -156,7 +154,7 @@ export default function Landing() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="mb-6">Why Choose StockSense AI?</h2>
+            <h2 className="mb-6">Why Choose StockWise AI?</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Transform your inventory management from reactive to predictive with AI insights.
             </p>
@@ -287,7 +285,7 @@ export default function Landing() {
             <div className="w-6 h-6 bg-primary rounded-sm flex items-center justify-center">
               <BarChart3 className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-medium">StockSense AI</span>
+            <span className="font-medium">StockWise AI</span>
           </div>
           <p className="text-sm text-muted-foreground">
             Intelligent inventory management for Indian retailers

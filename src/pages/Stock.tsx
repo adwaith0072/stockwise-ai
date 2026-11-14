@@ -4,12 +4,20 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router";
 
 export default function Stock() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const stock = useQuery(api.stock.getStock);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [authLoading, user, navigate]);
 
   // Helper: format expiry with days remaining/ago
   const formatExpiry = (ts?: number) => {
@@ -22,9 +30,12 @@ export default function Stock() {
     return ` • Expires ${dateStr} ${suffix}`;
   };
 
-  if (!user) {
-    navigate("/auth");
-    return null;
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   return (
@@ -35,16 +46,22 @@ export default function Stock() {
         transition={{ duration: 0.4 }}
         className="max-w-5xl mx-auto space-y-6"
       >
-        <div className="flex items-start justify-between gap-3 md:items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="mb-2">Stock</h1>
             <p className="text-muted-foreground">
               View all your inventory items in one place.
             </p>
           </div>
-          <Button onClick={() => navigate("/dashboard?tab=inventory")}>
-            Update Stock
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Dashboard
+            </Button>
+            <Button onClick={() => navigate("/dashboard?tab=inventory")}>
+              Update Stock
+            </Button>
+          </div>
         </div>
 
         <Card>

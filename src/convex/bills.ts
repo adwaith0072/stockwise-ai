@@ -1,15 +1,18 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { getCurrentUser } from "./users";
 
-// Create a new bill and update stock
+// Create a new bill and update stock atomically
 export const createBill = mutation({
   args: {
     customerName: v.optional(v.string()),
-    items: v.array(v.object({
-      stockId: v.id("stock"),
-      quantity: v.number(),
-    })),
+    items: v.array(
+      v.object({
+        stockId: v.id("stock"),
+        quantity: v.number(),
+      }),
+    ),
     paymentMethod: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -18,27 +21,53 @@ export const createBill = mutation({
       throw new Error("Not authenticated");
     }
 
-    // Validate stock and calculate totals
-    const billItems = [];
+    if (args.items.length === 0) {
+      throw new Error("Bill must contain at least one item");
+    }
+
+    // Consolidate duplicate stockId entries and validate quantities > 0
+    const mergedQuantities = new Map<Id<"stock">, number>();
+    for (const item of args.items) {
+      if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
+        throw new Error("Item quantity must be a positive number");
+      }
+      mergedQuantities.set(
+        item.stockId,
+        (mergedQuantities.get(item.stockId) ?? 0) + item.quantity,
+      );
+    }
+
+    // Validate stock availability and calculate totals
+    const billItems: Array<{
+      stockId: Id<"stock">;
+      itemName: string;
+      quantity: number;
+      pricePerUnit: number;
+      totalPrice: number;
+      remainingQuantity: number;
+    }> = [];
     let totalAmount = 0;
 
-    for (const item of args.items) {
-      const stock = await ctx.db.get(item.stockId);
+    for (const [stockId, quantity] of mergedQuantities.entries()) {
+      const stock = await ctx.db.get(stockId);
       if (!stock || stock.userId !== user._id) {
-        throw new Error(`Stock item not found: ${item.stockId}`);
+        throw new Error(`Stock item not found: ${stockId}`);
       }
 
-      if (stock.currentQuantity < item.quantity) {
-        throw new Error(`Insufficient stock for ${stock.itemName}`);
+      if (stock.currentQuantity < quantity) {
+        throw new Error(
+          `Insufficient stock for ${stock.itemName} (available: ${stock.currentQuantity}, requested: ${quantity})`,
+        );
       }
 
-      const totalPrice = stock.pricePerUnit * item.quantity;
+      const totalPrice = stock.pricePerUnit * quantity;
       billItems.push({
-        stockId: item.stockId,
+        stockId,
         itemName: stock.itemName,
-        quantity: item.quantity,
+        quantity,
         pricePerUnit: stock.pricePerUnit,
         totalPrice,
+        remainingQuantity: stock.currentQuantity - quantity,
       });
 
       totalAmount += totalPrice;
@@ -47,29 +76,29 @@ export const createBill = mutation({
     // Create the bill
     const billId = await ctx.db.insert("bills", {
       userId: user._id,
-      customerName: args.customerName,
-      items: billItems,
+      customerName: args.customerName?.trim() || undefined,
+      items: billItems.map(({ stockId, itemName, quantity, pricePerUnit, totalPrice }) => ({
+        stockId,
+        itemName,
+        quantity,
+        pricePerUnit,
+        totalPrice,
+      })),
       totalAmount,
       paymentMethod: args.paymentMethod,
     });
 
-    // Update stock quantities and create sales records
-    for (let i = 0; i < args.items.length; i++) {
-      const item = args.items[i];
-      const billItem = billItems[i];
-
-      // Update stock
-      const stock = await ctx.db.get(item.stockId);
-      await ctx.db.patch(item.stockId, {
-        currentQuantity: stock!.currentQuantity - item.quantity,
+    // Deduct stock quantities and record individual sales transactions
+    for (const billItem of billItems) {
+      await ctx.db.patch(billItem.stockId, {
+        currentQuantity: billItem.remainingQuantity,
       });
 
-      // Create sales record
       await ctx.db.insert("sales", {
         userId: user._id,
-        stockId: item.stockId,
+        stockId: billItem.stockId,
         itemName: billItem.itemName,
-        quantitySold: item.quantity,
+        quantitySold: billItem.quantity,
         pricePerUnit: billItem.pricePerUnit,
         totalAmount: billItem.totalPrice,
         billId,
@@ -86,7 +115,6 @@ export const getBills = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) {
-      // Return empty list instead of throwing to avoid client crash before auth is ready
       return [];
     }
 
@@ -116,13 +144,12 @@ export const getBill = query({
   },
 });
 
-// Add: Get all sales for current user (for backups/exports)
+// Get all sales for current user (for backups/exports)
 export const getSales = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) {
-      // Return empty for unauthenticated to avoid client crash
       return [];
     }
 

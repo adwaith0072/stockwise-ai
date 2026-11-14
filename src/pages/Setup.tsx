@@ -2,35 +2,44 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Doc } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { Store, ArrowRight } from "lucide-react";
+import { Store, ArrowRight, Loader2 } from "lucide-react";
 
 export default function Setup() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const updateProfile = useMutation(api.users.updateProfile);
-  
+
   const [shopType, setShopType] = useState("");
   const [shopName, setShopName] = useState("");
   const [language, setLanguage] = useState("english");
   const [isLoading, setIsLoading] = useState(false);
 
-  if (!user) {
-    navigate("/auth");
-    return null;
-  }
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+    if (user.shopType) {
+      navigate("/dashboard");
+    }
+  }, [authLoading, user, navigate]);
 
-  // If user already has shop type, redirect to dashboard
-  if (user.shopType) {
-    navigate("/dashboard");
-    return null;
+  if (authLoading || !user || user.shopType) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,11 +52,11 @@ export default function Setup() {
     setIsLoading(true);
     try {
       await updateProfile({
-        shopType: shopType as any,
+        shopType: shopType as NonNullable<Doc<"users">["shopType"]>,
         shopName: shopName || undefined,
         language,
       });
-      
+
       toast.success("Profile updated successfully!");
       navigate("/dashboard");
     } catch (error) {
@@ -73,7 +82,7 @@ export default function Setup() {
   ];
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-8">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 md:p-8">
       <motion.div
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -93,7 +102,7 @@ export default function Setup() {
             </p>
           </CardHeader>
 
-          <CardContent className="p-8">
+          <CardContent className="p-6 md:p-8">
             <form onSubmit={handleSubmit} className="space-y-8">
               {/* Shop Type Selection */}
               <div className="space-y-4">

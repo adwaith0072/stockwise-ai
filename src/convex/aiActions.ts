@@ -2,7 +2,7 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 // Helper: extract text from Gemini response safely
 async function extractGeminiText(resp: Response) {
@@ -179,6 +179,14 @@ function seasonalRecommendations(shopType: string, season: "summer" | "monsoon" 
   return (pack[season] ?? []).slice(0, 10);
 }
 
+function normalizeLanguage(lang?: string): "english" | "hindi" | "malayalam" {
+  if (!lang) return "english";
+  const clean = lang.trim().toLowerCase();
+  if (clean === "hi" || clean === "hindi") return "hindi";
+  if (clean === "ml" || clean === "malayalam") return "malayalam";
+  return "english";
+}
+
 export const chatWithAI = action({
   args: {
     message: v.string(),
@@ -198,7 +206,9 @@ export const chatWithAI = action({
     const allBills = await ctx.runQuery(api.bills.getBills);
 
     const shopType = user.shopType || "general";
-    const language = args.language || user.language || "english";
+    const language = normalizeLanguage(args.language || user.language);
+    const enableSeasonal = user.aiEnableSeasonal !== false;
+    const enableDeadStock = user.aiEnableDeadStock !== false;
 
     // Add: compute recent (30d) sales by item
     const now = Date.now();
@@ -208,7 +218,7 @@ export const chatWithAI = action({
     const salesByItem: Record<string, SalesAgg> = {};
     for (const b of allBills) {
       // _creationTime exists on all documents
-      const created = (b as any)._creationTime as number | undefined;
+      const created = b._creationTime;
       if (created && created >= since) {
         for (const it of b.items) {
           const key = it.itemName;
@@ -250,14 +260,16 @@ export const chatWithAI = action({
     }
 
     // Add: compute slow movers and 30d revenue for broader trend insights
-    const slowMoversList = stock
-      .filter((s) => {
-        const agg = salesByItem[s.itemName];
-        const soldQty = agg?.qty ?? 0;
-        return soldQty === 0 && s.currentQuantity > 0;
-      })
-      .slice(0, 10)
-      .map((s) => `${s.itemName} (qty: ${s.currentQuantity}${s.unit ? " " + s.unit : ""})`);
+    const slowMoversList = enableDeadStock
+      ? stock
+          .filter((s) => {
+            const agg = salesByItem[s.itemName];
+            const soldQty = agg?.qty ?? 0;
+            return soldQty === 0 && s.currentQuantity > 0;
+          })
+          .slice(0, 10)
+          .map((s) => `${s.itemName} (qty: ${s.currentQuantity}${s.unit ? " " + s.unit : ""})`)
+      : [];
 
     const totalRevenue30d = Object.values(salesByItem).reduce((sum, a) => sum + a.revenue, 0);
 
@@ -265,7 +277,8 @@ export const chatWithAI = action({
     const currentSeason = getIndianSeason(now);
     const seasonFromQuery = detectSeasonFromText(args.message);
     const season = seasonFromQuery ?? currentSeason;
-    const seasonalRecs = seasonalRecommendations(shopType, season);
+    const seasonalRecs =
+      enableSeasonal || seasonFromQuery ? seasonalRecommendations(shopType, season) : [];
 
     // Prepare context summary to reduce tokens
     const contextSummary = [
@@ -276,9 +289,17 @@ export const chatWithAI = action({
       `Expiring in 30d: ${expiring.length} (${expiring.slice(0, 10).map(i => i.itemName).join(", ")})`,
       topSellers.length ? `Top Sellers (30d): ${topSellers.join("; ")}` : `Top Sellers (30d): None`,
       suggestions.length ? `Reorder Suggestions: ${suggestions.join("; ")}` : `Reorder Suggestions: None`,
-      slowMoversList.length ? `Slow Movers (no sales in 30d): ${slowMoversList.join("; ")}` : `Slow Movers: None`,
+      enableDeadStock
+        ? slowMoversList.length
+          ? `Slow Movers (no sales in 30d): ${slowMoversList.join("; ")}`
+          : `Slow Movers: None`
+        : `Slow Movers: Disabled in user settings`,
       `Revenue (30d): ₹${totalRevenue30d.toLocaleString()}`,
-      seasonalRecs.length ? `Seasonal Suggestions: ${seasonalRecs.join("; ")}` : `Seasonal Suggestions: None`,
+      enableSeasonal || seasonFromQuery
+        ? seasonalRecs.length
+          ? `Seasonal Suggestions: ${seasonalRecs.join("; ")}`
+          : `Seasonal Suggestions: None`
+        : `Seasonal Suggestions: Disabled in user settings`,
       `Preferred Language: ${language}`,
     ].join("\n");
 
@@ -286,12 +307,14 @@ export const chatWithAI = action({
     const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY as string | undefined;
     const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY as string | undefined;
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY as string | undefined;
+    const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const openRouterModel = process.env.OPENROUTER_MODEL || `google/${geminiModel}`;
 
     let responseText = "";
 
     // Build a shared prompt once for both providers
     const systemPreamble =
-      "You are StockSense AI, an assistant for small Indian retailers. Provide concise, actionable inventory and billing insights. Use the provided context. Keep answers practical.";
+      "You are StockWise AI, an assistant for small Indian retailers. Provide concise, actionable inventory and billing insights. Use the provided context. Keep answers practical.";
 
     const prompt = [
       systemPreamble,
@@ -308,7 +331,9 @@ export const chatWithAI = action({
       "- Consider minStockLevel if provided.",
       "- If expiring soon, avoid recommending large replenishments; mention caution.",
       "- Present clear bullets: Item — Reason — Suggested Order.",
-      "- Include a short 'Seasonal reminders' section tailored to the current season and shop type.",
+      ...(enableSeasonal || seasonFromQuery
+        ? ["- Include a short 'Seasonal reminders' section tailored to the current season and shop type."]
+        : []),
       "- Keep the tone simple and professional.",
       language !== "english" ? `- Respond in ${language}.` : "- Respond in English.",
     ].join("\n");
@@ -322,11 +347,11 @@ export const chatWithAI = action({
             "Content-Type": "application/json",
             Authorization: `Bearer ${OPENROUTER_API_KEY}`,
             // Add recommended headers so OpenRouter accepts the request reliably
-            "HTTP-Referer": "https://stocksense.ai",
-            "X-Title": "StockSense AI",
+            "HTTP-Referer": "https://stockwise.ai",
+            "X-Title": "StockWise AI",
           },
           body: JSON.stringify({
-            model: "google/gemini-1.5-pro",
+            model: openRouterModel,
             messages: [
               { role: "system", content: systemPreamble },
               { role: "user", content: prompt },
@@ -348,7 +373,7 @@ export const chatWithAI = action({
         if (Array.isArray(msgContent)) {
           responseText =
             msgContent
-              .map((part: any) =>
+              .map((part: string | { text?: string; content?: string }) =>
                 typeof part === "string" ? part : part?.text ?? part?.content ?? "",
               )
               .join("\n")
@@ -365,8 +390,7 @@ export const chatWithAI = action({
     if (!responseText && (GOOGLE_API_KEY || GEMINI_API_KEY)) {
       try {
         const API_KEY = GOOGLE_API_KEY || GEMINI_API_KEY;
-        const endpoint =
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent";
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
 
         const body = {
           contents: [
@@ -381,10 +405,11 @@ export const chatWithAI = action({
           },
         };
 
-        const resp = await fetch(endpoint + `?key=${API_KEY}`, {
+        const resp = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "x-goog-api-key": API_KEY!,
           },
           body: JSON.stringify(body),
         });
@@ -508,7 +533,7 @@ export const chatWithAI = action({
     }
 
     // Save chat history
-    await ctx.runMutation(api.ai.saveChatHistory, {
+    await ctx.runMutation(internal.ai.saveChatHistory, {
       userId: user._id,
       message: args.message,
       response: responseText,

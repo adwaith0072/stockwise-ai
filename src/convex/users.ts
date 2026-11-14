@@ -3,10 +3,16 @@ import { query, QueryCtx, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { shopTypeValidator } from "./schema";
 
+export function normalizeLanguage(lang?: string): string {
+  if (!lang) return "english";
+  const clean = lang.trim().toLowerCase();
+  if (clean === "hi" || clean === "hindi") return "hindi";
+  if (clean === "ml" || clean === "malayalam") return "malayalam";
+  return "english";
+}
+
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
- * Usage: const signedInUser = await ctx.runQuery(api.authHelpers.currentUser);
- * THIS FUNCTION IS READ-ONLY. DO NOT MODIFY.
  */
 export const currentUser = query({
   args: {},
@@ -22,9 +28,7 @@ export const currentUser = query({
 });
 
 /**
- * Use this function internally to get the current user data. Remember to handle the null user case.
- * @param ctx
- * @returns
+ * Use this function internally to get the current user data.
  */
 export const getCurrentUser = async (ctx: QueryCtx) => {
   const userId = await getAuthUserId(ctx);
@@ -49,8 +53,8 @@ export const updateProfile = mutation({
 
     await ctx.db.patch(user._id, {
       shopType: args.shopType,
-      shopName: args.shopName,
-      language: args.language,
+      shopName: args.shopName?.trim() || undefined,
+      language: normalizeLanguage(args.language),
     });
 
     return user._id;
@@ -88,6 +92,11 @@ export const updateSettings = mutation({
 
     await ctx.db.patch(user._id, {
       ...args,
+      shopName: args.shopName !== undefined ? args.shopName.trim() || undefined : user.shopName,
+      ownerName: args.ownerName !== undefined ? args.ownerName.trim() || undefined : user.ownerName,
+      contactNumber:
+        args.contactNumber !== undefined ? args.contactNumber.trim() || undefined : user.contactNumber,
+      language: args.language !== undefined ? normalizeLanguage(args.language) : user.language,
     });
 
     return user._id;
@@ -127,6 +136,15 @@ export const clearData = mutation({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
     for (const row of billRows) {
+      await ctx.db.delete(row._id);
+    }
+
+    // Delete AI chat history
+    const chatRows = await ctx.db
+      .query("chatHistory")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const row of chatRows) {
       await ctx.db.delete(row._id);
     }
 

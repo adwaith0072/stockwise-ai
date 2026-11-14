@@ -16,7 +16,7 @@ export const roleValidator = v.union(
 );
 export type Role = Infer<typeof roleValidator>;
 
-// Shop types for StockSense AI
+// Shop types for StockWise AI
 export const SHOP_TYPES = {
   GROCERY: "grocery",
   PHARMACY: "pharmacy", 
@@ -49,7 +49,7 @@ const schema = defineSchema(
 
       role: v.optional(roleValidator), // role of the user. do not remove
       
-      // StockSense specific fields
+      // StockWise AI specific fields
       shopType: v.optional(shopTypeValidator),
       shopName: v.optional(v.string()),
       language: v.optional(v.string()), // preferred language for AI assistant
@@ -123,7 +123,7 @@ const schema = defineSchema(
     }).index("by_user", ["userId"]),
   },
   {
-    schemaValidation: false,
+    schemaValidation: true,
   },
 );
 
